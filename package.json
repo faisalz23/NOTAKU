@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "scripts": {
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "backend\\.venv\\Scripts\\python.exe backend\\api.py",
+    "dev": "concurrently -n BACKEND,FRONTEND -c magenta,cyan \"npm run dev:backend\" \"npm run dev:frontend\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
