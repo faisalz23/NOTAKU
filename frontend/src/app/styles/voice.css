@@ -177,6 +177,9 @@ body {
     flex: 1;
     min-width: 80px;
   }
+  .btn-group button:active {
+    background: linear-gradient(135deg, #2b8ae3 0%, #0064b3 100%);
+  }
   
   .btn-group button:disabled {
     background: #b0c4de;
@@ -184,7 +187,12 @@ body {
   }
   
   #stopBtn {
-    background: #e81123;
+    background: #ffffff;
+    color: #0078d7;
+    border: 1px solid #0078d7;
+  }
+  #stopBtn:active {
+    background: linear-gradient(135deg, #f8fbff 0%, #e6f2ff 100%);
   }
   
   #stopBtn:disabled {
@@ -242,7 +250,7 @@ body {
     outline: none;
   }
   #summaryEditor.loading {
-    background-image: radial-gradient(circle at center, #e6f2ff 0, #f9fbfc 70%);
+    background: #f0f7ff;
   }
   #summaryEditor:empty:before {
     content: attr(data-placeholder);
@@ -374,7 +382,7 @@ body {
   .progress-fill {
     height: 100%;
     width: 0%;
-    background: linear-gradient(90deg, #84c5f4, #0078d7);
+    background: #0078d7;
     transition: width 0.25s ease;
   }
   

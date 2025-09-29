@@ -3,11 +3,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 
+type Role = "dokter_patologi" | "dokter_hewan";
+
 export default function RegisterPage() {
   const router = useRouter();
   const supabase = supabaseBrowser();
 
   const [username, setUsername] = useState("");
+  const [role, setRole]         = useState<Role | "">("");      // ⟵ NEW
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm]   = useState("");
@@ -19,49 +22,32 @@ export default function RegisterPage() {
     e.preventDefault();
     setErr(null); setInfo(null);
 
-    if (password !== confirm) {
-      setErr("Password confirmation does not match.");
-      return;
-    }
+    if (password !== confirm) return setErr("Password confirmation does not match.");
+    if (!role) return setErr("Please choose your role.");
 
     setLoading(true);
-    // Daftar pakai Supabase; username disimpan di user_metadata
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { username },
-        emailRedirectTo: `${location.origin}/login`, // jika email confirmation ON
+        data: { username, role },                       // ⟵ simpan role
+        emailRedirectTo: `${location.origin}/login`,
       },
     });
     setLoading(false);
 
-    if (error) {
-      setErr(error.message);
-      return;
-    }
+    if (error) return setErr(error.message);
 
-    // Jika email confirmation diaktifkan, session akan null
-    if (!data.session) {
-      setInfo("Registration successful. Please check your email for verification and then sign in.");
-    } else {
-      // Kalau confirmation OFF → langsung login
-      router.push("/dashboard");
-    }
+    if (!data.session) setInfo("Registration successful. Please verify your email, then sign in.");
+    else router.push("/dashboard");
   };
-
 
   return (
     <div className="auth-container register-form">
       <div className="form-side">
         <div className="form-box">
           <h1>Create Account</h1>
-          <p style={{ 
-            textAlign: 'center', 
-            color: '#6b7280', 
-            marginBottom: '24px', 
-            fontSize: '14px' 
-          }}>
+          <p style={{ textAlign:'center', color:'#6b7280', marginBottom:24, fontSize:14 }}>
             Join us today and start your journey
           </p>
 
@@ -69,14 +55,36 @@ export default function RegisterPage() {
           {info && <div className="alert success">{info}</div>}
 
           <form onSubmit={onSubmit}>
-            <label>Username</label>
-            <input
-              placeholder="Choose a username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-              autoComplete="username"
-            />
+            {/* ROW: Username + Role (2 kolom) */}
+            <div className="row-2">
+              <div className="field">
+                <label>Username</label>
+                <input
+                  placeholder="Choose a username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required
+                  autoComplete="username"
+                />
+              </div>
+
+              <div className="field">
+                <label>Role</label>
+                <div className="select">
+                  <select
+                    value={role}
+                    onChange={(e) => setRole(e.target.value as Role)}
+                    required
+                    aria-label="Choose your role"
+                  >
+                    <option value="" disabled>Choose your role</option>
+                    <option value="dokter_patologi">pathologist</option>
+                    <option value="dokter_hewan">veterinarian</option>
+                  </select>
+                  <span className="chev">▾</span>
+                </div>
+              </div>
+            </div>
 
             <label>Email</label>
             <input
@@ -115,7 +123,6 @@ export default function RegisterPage() {
             </button>
           </form>
 
-
           <p className="muted center">
             Already have an account? <a href="/login">Sign in</a>
           </p>
@@ -123,7 +130,6 @@ export default function RegisterPage() {
       </div>
 
       <div className="image-side">
-        {/* Pakai path absolut agar aman di Next.js public/ */}
         <img src="/login.jpg" alt="Register Illustration" />
       </div>
     </div>

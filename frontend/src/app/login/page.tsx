@@ -3,6 +3,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 
+type RoleMeta = "dokter_patologi" | "dokter_hewan";
+function roleToMode(role?: string): "patologi" | "dokter_hewan" {
+  return role === "dokter_hewan" ? "dokter_hewan" : "patologi";
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const supabase = supabaseBrowser();
@@ -13,16 +18,19 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
 
+  const persistRoleLocally = (role?: string) => {
+    const mode = roleToMode(role);
+    // dipakai VoicePanel untuk menentukan 'mode' saat stream/HTTP
+    localStorage.setItem("role", role || "dokter_patologi");
+    localStorage.setItem("summaryMode", mode);
+  };
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(null);
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
 
     if (error) {
@@ -30,6 +38,21 @@ export default function LoginPage() {
       return;
     }
 
+    // Ambil user & role setelah sign-in
+    const { data: { user }, error: userErr } = await supabase.auth.getUser();
+    if (userErr) {
+      setErr(userErr.message);
+      return;
+    }
+
+    const role = (user?.user_metadata?.role as RoleMeta | undefined);
+    if (!role) {
+      // belum punya role -> arahkan ke onboarding pilih peran
+      router.push("/onboarding/role?next=/dashboard");
+      return;
+    }
+
+    persistRoleLocally(role);
     router.push("/dashboard");
   };
 
@@ -38,11 +61,10 @@ export default function LoginPage() {
     setLoading(true);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${location.origin}/auth/callback` },
+      options: { redirectTo: `${location.origin}/auth/callback` }, // di /auth/callback lakukan hal yang sama: baca user.role, persist, redirect
     });
     setLoading(false);
     if (error) setErr(error.message);
-    // setelah ini Supabase akan redirect sendiri ke Google -> kembali ke /auth/callback
   };
 
   const onForgot = async () => {
@@ -65,12 +87,7 @@ export default function LoginPage() {
       <div className="form-side">
         <div className="form-box">
           <h1>Welcome Back</h1>
-          <p style={{ 
-            textAlign: 'center', 
-            color: '#6b7280', 
-            marginBottom: '24px', 
-            fontSize: '14px' 
-          }}>
+          <p style={{ textAlign:'center', color:'#6b7280', marginBottom:24, fontSize:14 }}>
             Sign in to your account to continue
           </p>
 
@@ -120,15 +137,15 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            margin: '24px 0', 
-            color: '#9ca3af' 
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            margin: '24px 0',
+            color: '#9ca3af'
           }}>
-            <div style={{ flex: 1, height: '1px', background: '#e5e7eb' }}></div>
-            <span style={{ padding: '0 16px', fontSize: '14px' }}>or continue with</span>
-            <div style={{ flex: 1, height: '1px', background: '#e5e7eb' }}></div>
+            <div style={{ flex: 1, height: '1px', background: '#e5e7eb' }} />
+            <span style={{ padding: '0 16px', fontSize: 14 }}>or continue with</span>
+            <div style={{ flex: 1, height: '1px', background: '#e5e7eb' }} />
           </div>
 
           <button className="btn google" type="button" onClick={onGoogle} disabled={loading}>

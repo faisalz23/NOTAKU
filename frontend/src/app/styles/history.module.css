@@ -333,10 +333,11 @@
 }
 
 .primaryBtn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #0078d7;
   color: white;
   border-color: transparent;
 }
+.primaryBtn:active { background: linear-gradient(135deg, #2b8ae3 0%, #0064b3 100%); }
 
 .primaryBtn:hover {
   transform: translateY(-1px);
@@ -376,7 +377,7 @@
   width: 80px;
   height: 80px;
   margin: 0 auto 24px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #0078d7;
   border-radius: 20px;
   display: flex;
   align-items: center;

@@ -114,12 +114,13 @@
   border-top: 1px solid #e5e7eb;
 }
 .btnSave {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: 1px solid rgba(102,126,234,.3); color: #fff;
+  background: #0078d7;
+  border: 1px solid rgba(0,120,215,.3); color: #fff;
   padding: 12px 24px; border-radius: 12px; font-weight: 600; cursor: pointer;
-  transition: all .2s; box-shadow: 0 4px 12px rgba(102,126,234,.2);
+  transition: all .2s; box-shadow: 0 4px 12px rgba(0,120,215,.2);
 }
-.btnSave:hover { background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%); box-shadow: 0 6px 16px rgba(102,126,234,.3); }
+.btnSave:hover { background: #0064b3; box-shadow: 0 6px 16px rgba(0,120,215,.3); }
+.btnSave:active { background: linear-gradient(135deg, #2b8ae3 0%, #0064b3 100%); }
 .btnReset {
   background: #ffffff; border: 1px solid #e5e7eb; color: #374151;
   padding: 12px 24px; border-radius: 12px; font-weight: 500; cursor: pointer; transition: all .2s; margin-right: 12px;
