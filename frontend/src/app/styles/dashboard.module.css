@@ -6,11 +6,11 @@
   grid-template-areas:
     "sidebar topbar"
     "sidebar content";
-  height: 100vh; /* Changed from min-height to height for fixed layout */
-  background: #ffffff; /* light background to match auth */
+  height: 100vh;
+  background: #ffffff;
   color: #0b1622;
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  overflow: hidden; /* Prevent body scroll */
+  overflow: hidden;
 }
 
 /* Sidebar */
@@ -20,11 +20,11 @@
   color: #0b1622;
   padding: 16px 12px;
   border-right: 1px solid #e5eaf1;
-  overflow-y: auto; /* Allow sidebar to scroll if needed */
-  position: sticky; /* Keep sidebar fixed */
+  overflow-y: auto;
+  position: sticky;
   top: 0;
   height: 100vh;
-  font-size: 12px; /* Full height */
+  font-size: 12px;
 }
 .sbInner { display: flex; flex-direction: column; height: 100%; gap: 16px; }
 
@@ -168,11 +168,11 @@
 .content {
   grid-area: content;
   padding: 18px;
-  display: flex; /* make content a flex column so children can fill height */
+  display: flex;
   flex-direction: column;
-  min-height: 0; /* allow children to expand without causing overflow */
-  overflow-y: auto; /* allow scrolling if content is too long */
-  height: calc(100vh - 64px); /* Full height minus topbar height */
+  min-height: 0;
+  overflow-y: auto;
+  height: calc(100vh - 64px);
   font-size: 12px;
 }
 .cards {
@@ -192,15 +192,15 @@
 /* Voice iframe state */
 .voiceWrap {
   width: 100%;
-  flex: 1; /* fill available vertical space under topbar */
-  min-height: 0; /* prevent overflow clipping */
+  flex: 1;
+  min-height: 0;
 }
 .voiceFrame {
   width: 100%;
   height: 100%;
   border: 0; border-radius: 14px; background: #f7fafc;
-  display: flex;            /* allow child to fill height */
-  flex-direction: column;   /* header then container */
+  display: flex;            
+  flex-direction: column;   
 }
 
 /* Responsive */
@@ -209,7 +209,7 @@
     grid-template-columns: 84px 1fr;
   }
   .brandName { display: none; }
-  .navItem span { display: none; } /* sembunyikan label, sisakan emoji/icon */
+  .navItem span { display: none; }
 }
 
 @media (max-width: 768px) {
