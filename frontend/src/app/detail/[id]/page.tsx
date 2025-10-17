@@ -221,7 +221,7 @@ export default function DetailPage() {
 
           <div className={s.rightGroup}>
             <div className={s.avatar} onClick={toggleProfileDropdown}>
-              <Image src={avatar} alt="Foto profil" width={36} height={36} unoptimized />
+              <Image src={avatar} alt="Foto profil" width={36} height={36} unoptimized className={s.avatarImg} />
               <div className={s.meta}>
                 <div className={s.name}>{username}</div>
               </div>

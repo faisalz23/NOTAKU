@@ -221,6 +221,7 @@ export default function HistoryPage() {
                 width={36}
                 height={36}
                 unoptimized
+                className={s.avatarImg}
               />
               <div className={s.meta}>
                 <div className={s.name}>{username}</div>

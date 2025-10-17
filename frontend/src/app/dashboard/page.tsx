@@ -216,7 +216,7 @@ export default function Dashboard() {
             </button>
 
             <div className={s.avatar} onClick={toggleProfileDropdown}>
-              <Image src={avatar} alt="Foto profil" width={40} height={40} unoptimized />
+              <Image src={avatar} alt="Foto profil" width={40} height={40} unoptimized className={s.avatarImg} />
               <div className={s.meta}>
                 <div className={s.name}>{username}</div>
                 <div className={s.role}></div>

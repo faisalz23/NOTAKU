@@ -106,6 +106,7 @@
   cursor: pointer;
 }
 .avatar img { border-radius: 50%; }
+.avatarImg { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; aspect-ratio: 1 / 1; }
 .meta { line-height: 1.1; }
 .name { font-weight: 500; }
 .role { font-size: 12px; color: #6a7485; }

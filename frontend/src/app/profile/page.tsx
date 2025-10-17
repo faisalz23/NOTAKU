@@ -49,7 +49,7 @@ export default function ProfilePage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // load user data
+  // load user data from auth.user_metadata (reverted to original behavior)
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -64,7 +64,7 @@ export default function ProfilePage() {
       setEmail(session.user.email || "");
       const userMeta = (session.user.user_metadata as UserMeta) || {};
       setMeta(userMeta);
-      
+
       // Initialize form data
       setFormData({
         username: userMeta.username || "",
@@ -141,12 +141,61 @@ export default function ProfilePage() {
     setUploading(true);
 
     try {
-      // For now, we'll use a placeholder URL
-      // In a real app, you'd upload to Supabase Storage or another service
-      const avatarUrl = URL.createObjectURL(file);
-      
-      setFormData(prev => ({ ...prev, avatar_url: avatarUrl }));
+      // Keep old avatar url to delete after successful update
+      const previousUrl = (formData.avatar_url || meta.avatar_url || "").toString();
+
+      // Upload to Supabase Storage → avatars bucket
+      const { data: sessionRes } = await supabase.auth.getSession();
+      const userId = sessionRes.session?.user?.id;
+      if (!userId) {
+        showToast("Session not found. Please login again.", "error");
+        return;
+      }
+
+      const fileExt = file.name.split('.').pop() || 'jpg';
+      const filePath = `${userId}/${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, {
+          upsert: false,
+          contentType: file.type,
+        });
+      if (uploadError) {
+        showToast(uploadError.message, "error");
+        return;
+      }
+
+      const { data: publicData } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+      const publicUrl = publicData.publicUrl;
+
+      // Persist URL to user metadata
+      const { error: updateErr } = await supabase.auth.updateUser({
+        data: { avatar_url: publicUrl }
+      });
+      if (updateErr) {
+        showToast(updateErr.message, "error");
+        return;
+      }
+
+      setFormData(prev => ({ ...prev, avatar_url: publicUrl }));
+      setMeta(prev => ({ ...prev, avatar_url: publicUrl }));
       showToast("Avatar updated successfully!", "success");
+
+      // Attempt to delete the previous avatar if it was stored in our avatars bucket
+      try {
+        if (previousUrl && previousUrl.includes('/storage/v1/object/public/avatars/')) {
+          const parts = previousUrl.split('/storage/v1/object/public/avatars/');
+          const oldPath = parts[1];
+          if (oldPath && oldPath.length > 0 && oldPath !== filePath) {
+            await supabase.storage.from('avatars').remove([oldPath]);
+          }
+        }
+      } catch (_) {
+        // ignore cleanup errors
+      }
     } catch (error) {
       showToast("Failed to upload avatar", "error");
     } finally {
@@ -269,7 +318,7 @@ export default function ProfilePage() {
 
           <div className={s.rightGroup}>
             <div className={s.avatar} onClick={toggleProfileDropdown}>
-              <Image src={avatar} alt="Foto profil" width={36} height={36} unoptimized />
+              <Image src={avatar} alt="Foto profil" width={36} height={36} unoptimized className={s.avatarImg} />
               <div className={s.meta}>
                 <div className={s.name}>{username}</div>
               </div>
@@ -319,6 +368,10 @@ export default function ProfilePage() {
                     height={64} 
                     style={{ borderRadius: '50%', objectFit: 'cover' }}
                     unoptimized 
+                    onError={(_e: any) => {
+                      // Fallback ke placeholder bila URL rusak/expired
+                      setFormData(prev => ({ ...prev, avatar_url: "https://i.pravatar.cc/64?img=12" }));
+                    }}
                   />
                   <div>
                     <input

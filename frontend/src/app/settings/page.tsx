@@ -328,12 +328,15 @@ export default function SettingsPage() {
       {/* CONTENT */}
       <main className={s.content}>
         <div className={h.settingsContainer}>
-          <h2>Settings</h2>
+          <div className={h.settingsHeader}>
+            <h2 className={h.pageTitle}>Settings</h2>
+            <div className={h.settingsSubtitle}>Manage app preferences, AI options, and system behaviors</div>
+          </div>
 
           {/* Voice Settings */}
           {matchesQuery("pengaturan suara bahasa sensitivitas otomatis noise") && (
             <section className={h.section}>
-              <h3>Voice Settings</h3>
+              <h3 className={h.sectionTitle}>Voice Settings</h3>
 
               <div className={h.item}>
                 <div className={h.info}>
@@ -404,172 +407,45 @@ export default function SettingsPage() {
             </section>
           )}
 
-          {/* AI Settings */}
-          {matchesQuery("ai model kreativitas ringkasan delay") && (
-            <section className={h.section}>
-              <h3>AI Settings</h3>
+          {/* AI Settings removed to simplify UI */}
 
-              <div className={h.item}>
-                <div className={h.info}>
-                  <div className={h.label}>AI Model</div>
-                  <div className={h.desc}>Choose the AI model for text summarization</div>
-                </div>
-                <div className={h.control}>
-                  <div className={h.selectWrap}>
-                    <select id="aiModel" value={settings.aiModel} onChange={onText("aiModel")}>
-                      <option value="llama-3.3-70b-versatile">Llama 3.3 70B (Default)</option>
-                      <option value="llama-3.1-70b-versatile">Llama 3.1 70B</option>
-                      <option value="llama-3.1-8b-instant">Llama 3.1 8B (Fast)</option>
-                      <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
-                    </select>
-                  </div>
+          {/* General Settings (simplified) */}
+          <section className={h.section}>
+            <h3 className={h.sectionTitle}>General Settings</h3>
+
+            <div className={h.item}>
+              <div className={h.info}>
+                <div className={h.label}>Tema Aplikasi</div>
+                <div className={h.desc}>Pilih tema tampilan aplikasi</div>
+              </div>
+              <div className={h.control}>
+                <div className={h.selectWrap}>
+                  <select id="appTheme" value={settings.appTheme} onChange={onText("appTheme")}>
+                    <option value="dark">Dark (Default)</option>
+                    <option value="light">Light</option>
+                    <option value="auto">Auto (Sesuai Sistem)</option>
+                  </select>
                 </div>
               </div>
+            </div>
 
-              <div className={h.item}>
-                <div className={h.info}>
-                  <div className={h.label}>AI Creativity</div>
-                  <div className={h.desc}>Adjust how creative the AI is in summarization</div>
-                </div>
-                <div className={h.control}>
-                  <div className={h.rangeWrap}>
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      value={settings.aiCreativity}
-                      onChange={onRange("aiCreativity")}
-                      className={h.range}
-                    />
-                    <span className={h.rangeValue}>{settings.aiCreativity}%</span>
-                  </div>
-                </div>
+            <div className={h.item}>
+              <div className={h.info}>
+                <div className={h.label}>Simpan Riwayat</div>
+                <div className={h.desc}>Otomatis menyimpan riwayat transkrip dan ringkasan</div>
               </div>
-
-              <div className={h.item}>
-                <div className={h.info}>
-                  <div className={h.label}>Auto Summarize</div>
-                  <div className={h.desc}>Automatically summarize text when finished speaking</div>
-                </div>
-                <div className={h.control}>
-                  <label className={h.toggle}>
-                    <input type="checkbox" checked={settings.autoSummarize} onChange={onCheck("autoSummarize")} />
-                    <span className={h.slider} />
-                  </label>
-                </div>
+              <div className={h.control}>
+                <label className={h.toggle}>
+                  <input type="checkbox" checked={settings.saveHistory} onChange={onCheck("saveHistory")} />
+                  <span className={h.slider} />
+                </label>
               </div>
-
-              <div className={h.item}>
-                <div className={h.info}>
-                  <div className={h.label}>Summarize Delay</div>
-                  <div className={h.desc}>Wait seconds before starting to summarize</div>
-                </div>
-                <div className={h.control}>
-                  <div className={h.rangeWrap}>
-                    <input
-                      type="range"
-                      min={1}
-                      max={10}
-                      value={settings.summarizeDelay}
-                      onChange={onRange("summarizeDelay")}
-                      className={h.range}
-                    />
-                    <span className={h.rangeValue}>{settings.summarizeDelay}s</span>
-                  </div>
-                </div>
-              </div>
-            </section>
-          )}
-
-          {/* General Settings */}
-          {matchesQuery("umum tema notifikasi simpan riwayat penyimpanan api key") && (
-            <section className={h.section}>
-              <h3>General Settings</h3>
-
-              <div className={h.item}>
-                <div className={h.info}>
-                  <div className={h.label}>Tema Aplikasi</div>
-                  <div className={h.desc}>Pilih tema tampilan aplikasi</div>
-                </div>
-                <div className={h.control}>
-                  <div className={h.selectWrap}>
-                    <select id="appTheme" value={settings.appTheme} onChange={onText("appTheme")}>
-                      <option value="dark">Dark (Default)</option>
-                      <option value="light">Light</option>
-                      <option value="auto">Auto (Sesuai Sistem)</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div className={h.item}>
-                <div className={h.info}>
-                  <div className={h.label}>Notifikasi Suara</div>
-                  <div className={h.desc}>Putar suara notifikasi saat selesai meringkas</div>
-                </div>
-                <div className={h.control}>
-                  <label className={h.toggle}>
-                    <input type="checkbox" checked={settings.soundNotifications} onChange={onCheck("soundNotifications")} />
-                    <span className={h.slider} />
-                  </label>
-                </div>
-              </div>
-
-              <div className={h.item}>
-                <div className={h.info}>
-                  <div className={h.label}>Simpan Riwayat</div>
-                  <div className={h.desc}>Otomatis menyimpan riwayat transkrip dan ringkasan</div>
-                </div>
-                <div className={h.control}>
-                  <label className={h.toggle}>
-                    <input type="checkbox" checked={settings.saveHistory} onChange={onCheck("saveHistory")} />
-                    <span className={h.slider} />
-                  </label>
-                </div>
-              </div>
-
-              <div className={h.item}>
-                <div className={h.info}>
-                  <div className={h.label}>Durasi Penyimpanan</div>
-                  <div className={h.desc}>Berapa lama riwayat disimpan (hari)</div>
-                </div>
-                <div className={h.control}>
-                  <div className={h.rangeWrap}>
-                    <input
-                      type="range"
-                      min={1}
-                      max={365}
-                      value={settings.historyRetention}
-                      onChange={onRange("historyRetention")}
-                      className={h.range}
-                    />
-                    <span className={h.rangeValue}>{settings.historyRetention} hari</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className={h.item}>
-                <div className={h.info}>
-                  <div className={h.label}>API Key Groq</div>
-                  <div className={h.desc}>Masukkan API key untuk mengakses layanan AI</div>
-                </div>
-                <div className={h.control}>
-                  <input
-                    type="password"
-                    id="groqApiKey"
-                    className={h.input}
-                    placeholder="Masukkan API key..."
-                    value={settings.groqApiKey}
-                    onChange={onText("groqApiKey")}
-                  />
-                </div>
-              </div>
-            </section>
-          )}
+            </div>
+          </section>
 
           {/* Status */}
           <section className={h.section}>
-            <h3>System Status</h3>
+            <h3 className={h.sectionTitle}>System Status</h3>
 
             <div className={h.item}>
               <div className={h.info}>
