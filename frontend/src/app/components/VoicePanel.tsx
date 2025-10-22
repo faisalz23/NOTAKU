@@ -540,29 +540,84 @@ export default function VoicePanel({ apiBase = "" }: Props) {
         </div>
 
         {/* Kanan */}
-        <div className="column summary-col">
-          <div
-            ref={progressBarRef}
-            className="progress-bar"
-            style={{ display: "none" }}
-          >
-            <div ref={progressFillRef} className="progress-fill" />
-          </div>
+        {/* Kanan */}
+<div className="column summary-col">
+  <div
+    ref={progressBarRef}
+    className="progress-bar"
+    style={{ display: "none" }}
+  >
+    <div ref={progressFillRef} className="progress-fill" />
+  </div>
 
-          <div
-            ref={editorRef}
-            id="summaryEditor"
-            className="editor"
-            contentEditable
-            data-placeholder="Ringkasan akan muncul di sini..."
-            onInput={() =>
-              updateCountDisplay(editorRef.current?.textContent?.trim() || "")
-            }
-          />
-          <div style={{ marginTop: 6, fontSize: 12, color: "#64748b" }}>
-            <span ref={charCountRef} />
-          </div>
-        </div>
+  <div
+    ref={editorRef}
+    id="summaryEditor"
+    className="editor"
+    contentEditable
+    data-placeholder="Ringkasan akan muncul di sini..."
+    onInput={() =>
+      updateCountDisplay(editorRef.current?.textContent?.trim() || "")
+    }
+  />
+  <div style={{ marginTop: 6, fontSize: 12, color: "#64748b" }}>
+    <span ref={charCountRef} />
+  </div>
+
+  {/* ✅ Tombol Simpan */}
+  <div style={{ marginTop: 10, textAlign: "right" }}>
+    <button
+      onClick={async () => {
+        const summaryText = editorRef.current?.textContent?.trim();
+        const transcriptText = transcriptRef.current?.value?.trim();
+
+        if (!summaryText) {
+          showToast("Tidak ada ringkasan untuk disimpan.", "error");
+          return;
+        }
+
+        try {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+
+          if (!session) {
+            showToast("Silakan login terlebih dahulu.", "error");
+            return;
+          }
+
+          const user = session.user;
+          const { error } = await supabase.from("summaries").insert([
+            {
+              user_id: user.id,
+              transcript: transcriptText || "",
+              summary: summaryText,
+              created_at: new Date().toISOString(),
+            },
+          ]);
+
+          if (error) throw error;
+
+          showToast("Ringkasan berhasil disimpan!", "success");
+        } catch (err: any) {
+          console.error("❌ Gagal menyimpan:", err);
+          showToast("Gagal menyimpan ringkasan.", "error");
+        }
+      }}
+      style={{
+        background: "#1862d8",
+        color: "white",
+        padding: "6px 14px",
+        border: "none",
+        borderRadius: "8px",
+        cursor: "pointer",
+      }}
+    >
+      Simpan
+    </button>
+  </div>
+</div>
+
       </div>
 
       <div ref={toastRef} id="toast" className="toast" />

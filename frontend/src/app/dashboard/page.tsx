@@ -33,6 +33,9 @@ export default function Dashboard() {
   const [listening, setListening] = useState(false);
   const toggleListening = () => setListening((v) => !v);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+  const toggleSidebar = () => setSidebarOpen((v) => !v);
 
   // recent summaries
   const [recentSummaries, setRecentSummaries] = useState<RecentSummary[]>([
@@ -94,6 +97,14 @@ export default function Dashboard() {
     };
   }, [router, supabase]);
 
+  // detect mobile and keep sidebar behavior consistent
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -136,9 +147,8 @@ export default function Dashboard() {
   }
 
   return (
-    <div className={s.app}>
-      {/* SIDEBAR */}
-      <aside className={s.sidebar} id="sidebar">
+    <div className={`${s.app} ${sidebarOpen ? "" : s.appCollapsed}`}>
+      <aside className={`${s.sidebar} ${sidebarOpen ? "" : s.sidebarCollapsed}`}>
         <div className={s.sbInner}>
           <div className={s.brand}>
             <Image
@@ -166,21 +176,21 @@ export default function Dashboard() {
           </div>
 
           <nav className={s.nav} aria-label="Sidebar">
-            <a className={`${s.navItem} ${s.active}`} href="/dashboard">
+            <a className={s.navItem} href="/dashboard" onClick={() => isMobile && setSidebarOpen(false)}>
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
                 <polyline points="9,22 9,12 15,12 15,22"></polyline>
               </svg>
               <span>Dashboard</span>
             </a>
-            <a className={s.navItem} href="/history">
+            <a className={s.navItem} href="/history" onClick={() => isMobile && setSidebarOpen(false)}>
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10"></circle>
                 <polyline points="12,6 12,12 16,14"></polyline>
               </svg>
               <span>History</span>
             </a>
-            <a className={s.navItem} href="/settings">
+            <a className={s.navItem} href="/settings" onClick={() => isMobile && setSidebarOpen(false)}>
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="3"></circle>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
@@ -196,10 +206,26 @@ export default function Dashboard() {
         </div>
       </aside>
 
-      {/* TOPBAR */}
+      {/* overlay for mobile when sidebar open */}
+      {isMobile && sidebarOpen && (
+        <div
+          className={s.sidebarOverlay}
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       <header className={s.topbar}>
         <div className={s.tbWrap}>
           <div className={s.leftGroup}>
+            <button
+              className={s.sidebarToggle}
+              aria-pressed={!sidebarOpen}
+              aria-label={sidebarOpen ? "Tutup sidebar" : "Buka sidebar"}
+              onClick={toggleSidebar}
+            >
+              {sidebarOpen ? "✕" : "☰"}
+            </button>
             <div className={s.search} role="search">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="11" cy="11" r="8"></circle>
@@ -249,7 +275,6 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* KONTEN */}
       <main className={s.content}>
         {!listening ? (
           <div className={s.dashboardContainer}>
