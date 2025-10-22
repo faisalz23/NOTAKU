@@ -509,7 +509,7 @@ export default function VoicePanel({ apiBase = "" }: Props) {
   }, [summarizeInFlight]);
 
   return (
-    <>
+    <div className="vp">
       <h2 style={{ textAlign: "center", margin: "8px 0 16px", color: "#1862d8" }}>
         🎙️ Realtime Voice to Text
       </h2>
@@ -565,7 +565,7 @@ export default function VoicePanel({ apiBase = "" }: Props) {
   </div>
 
   {/* ✅ Tombol Simpan */}
-  <div style={{ marginTop: 10, textAlign: "right" }}>
+  <div className="saveWrap" style={{ textAlign: "right" }}>
     <button
       onClick={async () => {
         const summaryText = editorRef.current?.textContent?.trim();
@@ -621,6 +621,6 @@ export default function VoicePanel({ apiBase = "" }: Props) {
       </div>
 
       <div ref={toastRef} id="toast" className="toast" />
-    </>
+    </div>
   );
 }
