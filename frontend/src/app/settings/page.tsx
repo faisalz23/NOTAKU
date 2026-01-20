@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 import s from "@/app/styles/dashboard.module.css";  // layout (sidebar/topbar)
 import h from "@/app/styles/settings.module.css";   // style khusus settings
@@ -18,18 +18,6 @@ type Settings = {
   microphoneSensitivity: number;
   autoVoiceDetection: boolean;
   noiseFilter: boolean;
-
-  aiModel: string;
-  aiCreativity: number;
-  autoSummarize: boolean;
-  summarizeDelay: number;
-
-  appTheme: "dark" | "light" | "auto";
-  soundNotifications: boolean;
-  saveHistory: boolean;
-  historyRetention: number;
-
-  groqApiKey: string;
 };
 
 const DEFAULTS: Settings = {
@@ -37,23 +25,13 @@ const DEFAULTS: Settings = {
   microphoneSensitivity: 50,
   autoVoiceDetection: true,
   noiseFilter: true,
-
-  aiModel: "llama-3.3-70b-versatile",
-  aiCreativity: 30,
-  autoSummarize: true,
-  summarizeDelay: 2,
-
-  appTheme: "dark",
-  soundNotifications: true,
-  saveHistory: true,
-  historyRetention: 30,
-
-  groqApiKey: "",
 };
 
 export default function SettingsPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const supabase = supabaseBrowser();
+  const avatarRef = useRef<HTMLDivElement | null>(null);
   
   // auth/session
   const [loading, setLoading] = useState(true);
@@ -71,9 +49,7 @@ export default function SettingsPage() {
   const [query, setQuery] = useState("");
 
   // status
-  const [aiStatus, setAiStatus] = useState<"active" | "inactive">("active");
   const [micStatus, setMicStatus] = useState<"active" | "inactive">("inactive");
-  const [storageText, setStorageText] = useState<string>("—");
 
   // toast
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
@@ -104,40 +80,9 @@ export default function SettingsPage() {
       setMicStatus("inactive");
     }
   };
-  const checkAI = async () => {
-    try {
-      // Kalau kamu punya API health, ganti ke endpoint kamu:
-      // const res = await fetch("/api/health");
-      // setAiStatus(res.ok ? "active" : "inactive");
-      // Untuk sekarang, kita coba ping root (akan gagal di dev → jadi "inactive")
-      const res = await fetch("/", { method: "HEAD" });
-      setAiStatus(res.ok ? "active" : "inactive");
-    } catch {
-      setAiStatus("inactive");
-    }
-  };
-  const checkStorage = async () => {
-    // Estimasi storage (tidak semua browser support)
-    const anyNav = navigator as any;
-    if (anyNav?.storage?.estimate) {
-      const est = await anyNav.storage.estimate();
-      const used = ((est.usage || 0) / 1024 / 1024).toFixed(1);
-      const quota = ((est.quota || 0) / 1024 / 1024).toFixed(1);
-      setStorageText(`${used}MB / ${quota}MB`);
-    } else {
-      setStorageText("Tidak tersedia");
-    }
-  };
 
   useEffect(() => {
     checkMic();
-    checkAI();
-    checkStorage();
-    const id = setInterval(() => {
-      checkAI();
-      checkStorage();
-    }, 30000);
-    return () => clearInterval(id);
   }, []);
 
   // auth session management
@@ -215,19 +160,17 @@ export default function SettingsPage() {
     setShowProfileDropdown(false);
   };
 
-  // Close dropdown when clicking outside
+  // Close dropdown when clicking outside (only attach listener while open)
   useEffect(() => {
+    if (!showProfileDropdown) return;
     const handleClickOutside = (event: MouseEvent) => {
-      if (showProfileDropdown) {
-        const target = event.target as Element;
-        if (!target.closest(`.${s.avatar}`)) {
-          setShowProfileDropdown(false);
-        }
-      }
+      const target = event.target as Node | null;
+      const host = avatarRef.current;
+      if (host && target && !host.contains(target)) setShowProfileDropdown(false);
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showProfileDropdown]);
 
   // derived values
@@ -269,26 +212,37 @@ export default function SettingsPage() {
       <aside className={`${s.sidebar} ${sidebarOpen ? "" : s.sidebarCollapsed}`}>
         <div className={s.sbInner}>
           <div className={s.brand}>
-            <Image src="/logo_neurabot.jpg" alt="Logo Neurabot" width={40} height={40} className={s.brandImg} />
-            <div className={s.brandName}>Neurabot</div>
+            <div className={s.brandName}>NotaKu</div>
           </div>
 
           <nav className={s.nav} aria-label="Sidebar">
-            <a className={s.navItem} href="/dashboard" onClick={() => isMobile && setSidebarOpen(false)}>
+            <a
+              className={`${s.navItem} ${pathname === "/dashboard" ? s.active : ""}`}
+              href="/dashboard"
+              onClick={() => isMobile && setSidebarOpen(false)}
+            >
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
                 <polyline points="9,22 9,12 15,12 15,22"></polyline>
               </svg>
               <span>Dashboard</span>
             </a>
-            <a className={s.navItem} href="/history" onClick={() => isMobile && setSidebarOpen(false)}>
+            <a
+              className={`${s.navItem} ${pathname === "/history" ? s.active : ""}`}
+              href="/history"
+              onClick={() => isMobile && setSidebarOpen(false)}
+            >
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10"></circle>
                 <polyline points="12,6 12,12 16,14"></polyline>
               </svg>
               <span>History</span>
             </a>
-            <a className={s.navItem} href="/settings" onClick={() => isMobile && setSidebarOpen(false)}>
+            <a
+              className={`${s.navItem} ${pathname === "/settings" ? s.active : ""}`}
+              href="/settings"
+              onClick={() => isMobile && setSidebarOpen(false)}
+            >
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="3"></circle>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
@@ -298,7 +252,7 @@ export default function SettingsPage() {
           </nav>
 
           <div className={s.sbFooter}>
-            <div style={{ opacity: 0.6 }}>© 2025 Neurabot</div>
+            <div style={{ opacity: 0.6 }}>© 2025 NotaKu</div>
           </div>
         </div>
       </aside>
@@ -332,7 +286,7 @@ export default function SettingsPage() {
           </div>
 
           <div className={s.rightGroup}>
-            <div className={s.avatar} onClick={toggleProfileDropdown}>
+            <div className={s.avatar} onClick={toggleProfileDropdown} ref={avatarRef}>
               <Image src={avatar} alt="Foto profil" width={40} height={40} className={s.avatarImg} unoptimized />
               <div className={s.meta}>
                 <div className={s.name}>{username}</div>
@@ -448,81 +402,19 @@ export default function SettingsPage() {
             </section>
           )}
 
-          {/* AI Settings removed to simplify UI */}
-
           {/* General Settings (simplified) */}
           <section className={h.section}>
-            <h3 className={h.sectionTitle}>General Settings</h3>
-
-            <div className={h.item}>
-              <div className={h.info}>
-                <div className={h.label}>Tema Aplikasi</div>
-                <div className={h.desc}>Pilih tema tampilan aplikasi</div>
-              </div>
-              <div className={h.control}>
-                <div className={h.selectWrap}>
-                  <select id="appTheme" value={settings.appTheme} onChange={onText("appTheme")}>
-                    <option value="dark">Dark (Default)</option>
-                    <option value="light">Light</option>
-                    <option value="auto">Auto (Sesuai Sistem)</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div className={h.item}>
-              <div className={h.info}>
-                <div className={h.label}>Simpan Riwayat</div>
-                <div className={h.desc}>Otomatis menyimpan riwayat transkrip dan ringkasan</div>
-              </div>
-              <div className={h.control}>
-                <label className={h.toggle}>
-                  <input type="checkbox" checked={settings.saveHistory} onChange={onCheck("saveHistory")} />
-                  <span className={h.slider} />
-                </label>
-              </div>
-            </div>
-          </section>
-
-          {/* Status */}
-          <section className={h.section}>
-            <h3 className={h.sectionTitle}>System Status</h3>
-
-            <div className={h.item}>
-              <div className={h.info}>
-                <div className={h.label}>Koneksi AI</div>
-                <div className={h.desc}>Status koneksi ke layanan AI</div>
-              </div>
-              <div className={h.control}>
-                <span className={`${h.status} ${aiStatus === "active" ? h.statusActive : h.statusInactive}`}>
-                  <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><circle cx="12" cy="12" r="10" /></svg>
-                  {aiStatus === "active" ? "Terhubung" : "Terputus"}
-                </span>
-              </div>
-            </div>
+            <h3 className={h.sectionTitle}>Status Sistem</h3>
 
             <div className={h.item}>
               <div className={h.info}>
                 <div className={h.label}>Mikrofon</div>
-                <div className={h.desc}>Status akses mikrofon</div>
+                <div className={h.desc}>Status akses mikrofon perangkat</div>
               </div>
               <div className={h.control}>
                 <span className={`${h.status} ${micStatus === "active" ? h.statusActive : h.statusInactive}`}>
                   <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><circle cx="12" cy="12" r="10" /></svg>
                   {micStatus === "active" ? "Tersedia" : "Tidak Tersedia"}
-                </span>
-              </div>
-            </div>
-
-            <div className={h.item}>
-              <div className={h.info}>
-                <div className={h.label}>Penyimpanan Lokal</div>
-                <div className={h.desc}>Ruang penyimpanan yang tersedia</div>
-              </div>
-              <div className={h.control}>
-                <span className={`${h.status} ${h.statusActive}`}>
-                  <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><circle cx="12" cy="12" r="10" /></svg>
-                  {storageText}
                 </span>
               </div>
             </div>

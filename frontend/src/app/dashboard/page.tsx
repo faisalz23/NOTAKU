@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import s from "@/app/styles/dashboard.module.css";
 import VoicePanel from "@/app/components/VoicePanel";
 import { supabaseBrowser } from "@/lib/supabaseClient";
@@ -13,16 +13,18 @@ type UserMeta = {
   [k: string]: any;
 };
 
-type RecentSummary = {
+type RecentNote = {
   id: string;
   title: string;
-  description: string;
-  time: string; // human readable, e.g., "10 minutes ago"
+  summary: string;
+  time: string; // human readable
 };
 
 export default function Dashboard() {
   const router = useRouter();
+  const pathname = usePathname();
   const supabase = supabaseBrowser();
+  const avatarRef = useRef<HTMLDivElement | null>(null);
 
   // auth/session
   const [loading, setLoading] = useState(true);
@@ -37,27 +39,12 @@ export default function Dashboard() {
   const [isMobile, setIsMobile] = useState(false);
   const toggleSidebar = () => setSidebarOpen((v) => !v);
 
-  // recent summaries
-  const [recentSummaries, setRecentSummaries] = useState<RecentSummary[]>([
-    {
-      id: "s1",
-      title: "Client Brief Summary",
-      description: "Latest summarize file opened",
-      time: "10 minutes ago",
-    },
-    {
-      id: "s2",
-      title: "Standup Notes Summary",
-      description: "Yesterday's highlights",
-      time: "25 minutes ago",
-    },
-    {
-      id: "s3",
-      title: "Interview Summary",
-      description: "Key talking points captured",
-      time: "1 hour ago",
-    },
-  ]);
+  // stats
+  const [totalMeetings, setTotalMeetings] = useState<number>(0);
+  const [totalNotes, setTotalNotes] = useState<number>(0);
+  const [totalWords, setTotalWords] = useState<number>(0);
+  const [recentNotes, setRecentNotes] = useState<RecentNote[]>([]);
+  const [statsLoading, setStatsLoading] = useState<boolean>(true);
 
   useEffect(() => {
     let mounted = true;
@@ -78,18 +65,66 @@ export default function Dashboard() {
       if (!sess) router.replace("/login");
     });
 
-    // load recent summaries from localStorage if available
-    try {
-      const raw = localStorage.getItem("recentSummaries");
-      if (raw) {
-        const parsed = JSON.parse(raw) as RecentSummary[];
-        if (Array.isArray(parsed) && parsed.length) {
-          setRecentSummaries(parsed.slice(0, 4));
+    // load stats & recent notes
+    (async () => {
+      try {
+        const userId = (await supabase.auth.getUser()).data.user?.id;
+        if (!userId) return;
+
+        // total meetings
+        const { count: meetingsCount, error: meetingsErr } = await supabase
+          .from("meetings")
+          .select("meeting_id", { count: "exact", head: true })
+          .eq("user_id", userId);
+        if (!meetingsErr && typeof meetingsCount === "number") setTotalMeetings(meetingsCount);
+
+        // notes data (for count, recent, and word count)
+        const { data: notesData, count: notesCount, error: notesErr } = await supabase
+          .from("notes")
+          .select(
+            `
+              note_id,
+              transcript_text,
+              summary_content,
+              created_at,
+              meetings:meeting_id ( title, user_id )
+            `,
+            { count: "exact" }
+          )
+          .eq("meetings.user_id", userId)
+          .order("created_at", { ascending: false });
+
+        if (!notesErr) {
+          if (typeof notesCount === "number") setTotalNotes(notesCount);
+
+          // word count from transcript_text
+          const totalWordsCalc =
+            notesData?.reduce((acc, n) => acc + (n.transcript_text || "").split(/\s+/).filter(Boolean).length, 0) || 0;
+          setTotalWords(totalWordsCalc);
+
+          // recent 4
+          const recent = (notesData || []).slice(0, 4).map((n: any) => {
+            const time = new Date(n.created_at || Date.now()).toLocaleString("id-ID", {
+              day: "numeric",
+              month: "short",
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+            return {
+              id: n.note_id,
+              title: n.meetings?.title || "Notulensi Rapat",
+              summary: n.summary_content || "",
+              time,
+            } as RecentNote;
+          });
+          setRecentNotes(recent);
         }
+      } catch (e) {
+        console.error("Failed to load dashboard stats:", e);
+      } finally {
+        setStatsLoading(false);
       }
-    } catch {
-      // ignore parse errors and keep fallback
-    }
+    })();
 
     return () => {
       mounted = false;
@@ -105,19 +140,17 @@ export default function Dashboard() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // Close dropdown when clicking outside
+  // Close dropdown when clicking outside (listener hanya aktif saat dropdown terbuka)
   useEffect(() => {
+    if (!showProfileDropdown) return;
     const handleClickOutside = (event: MouseEvent) => {
-      if (showProfileDropdown) {
-        const target = event.target as Element;
-        if (!target.closest(`.${s.avatar}`)) {
-          setShowProfileDropdown(false);
-        }
+      const target = event.target as Node;
+      if (avatarRef.current && !avatarRef.current.contains(target)) {
+        setShowProfileDropdown(false);
       }
     };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showProfileDropdown]);
 
   const onLogout = async () => {
@@ -151,46 +184,37 @@ export default function Dashboard() {
       <aside className={`${s.sidebar} ${sidebarOpen ? "" : s.sidebarCollapsed}`}>
         <div className={s.sbInner}>
           <div className={s.brand}>
-            <Image
-              src="/logo_neurabot.jpg"
-              alt="Logo Neurabot"
-              width={40}
-              height={40}
-              className={s.brandImg}
-              onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                target.style.display = "none";
-                const next = target.nextElementSibling as HTMLElement | null;
-                if (next) next.style.display = "grid";
-              }}
-            />
-            <div className={s.brandLogo} style={{ display: "none" }}>
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#07131f" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2l3.5 6H8.5L12 2Z"></path>
-                <path d="M12 22l-3.5-6h7L12 22Z"></path>
-                <path d="M2 12l6-3.5v7L2 12Z"></path>
-                <path d="M22 12l-6 3.5v-7L22 12Z"></path>
-              </svg>
-            </div>
-            <div className={s.brandName}>Neurabot</div>
+            <div className={s.brandName}>NotaKu</div>
           </div>
 
           <nav className={s.nav} aria-label="Sidebar">
-            <a className={s.navItem} href="/dashboard" onClick={() => isMobile && setSidebarOpen(false)}>
+            <a
+              className={`${s.navItem} ${pathname === "/dashboard" ? s.active : ""}`}
+              href="/dashboard"
+              onClick={() => isMobile && setSidebarOpen(false)}
+            >
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
                 <polyline points="9,22 9,12 15,12 15,22"></polyline>
               </svg>
               <span>Dashboard</span>
             </a>
-            <a className={s.navItem} href="/history" onClick={() => isMobile && setSidebarOpen(false)}>
+            <a
+              className={`${s.navItem} ${pathname === "/history" ? s.active : ""}`}
+              href="/history"
+              onClick={() => isMobile && setSidebarOpen(false)}
+            >
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10"></circle>
                 <polyline points="12,6 12,12 16,14"></polyline>
               </svg>
               <span>History</span>
             </a>
-            <a className={s.navItem} href="/settings" onClick={() => isMobile && setSidebarOpen(false)}>
+            <a
+              className={`${s.navItem} ${pathname === "/settings" ? s.active : ""}`}
+              href="/settings"
+              onClick={() => isMobile && setSidebarOpen(false)}
+            >
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="3"></circle>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
@@ -201,7 +225,7 @@ export default function Dashboard() {
 
           {/* Footer sidebar */}
           <div className={s.sbFooter}>
-            <div style={{ opacity: 0.6 }}>© 2025 Neurabot</div>
+            <div style={{ opacity: 0.6 }}>© 2025 NotaKu</div>
           </div>
         </div>
       </aside>
@@ -241,7 +265,7 @@ export default function Dashboard() {
               <span className={s.btnLabel}>{listening ? "Stop Listening" : "Start Listening"}</span>
             </button>
 
-            <div className={s.avatar} onClick={toggleProfileDropdown}>
+            <div className={s.avatar} onClick={toggleProfileDropdown} ref={avatarRef}>
               <Image src={avatar} alt="Foto profil" width={40} height={40} unoptimized className={s.avatarImg} />
               <div className={s.meta}>
                 <div className={s.name}>{username}</div>
@@ -290,9 +314,9 @@ export default function Dashboard() {
                   </svg>
                 </div>
                 <div className={s.cardContent}>
-                  <h3>Total Sessions</h3>
-                  <div className={s.cardValue}>24</div>
-                  <div className={s.cardSubtext}>+3 this week</div>
+                  <h3>Total Rapat</h3>
+                  <div className={s.cardValue}>{statsLoading ? "…" : totalMeetings}</div>
+                  <div className={s.cardSubtext}>Total meeting tersimpan</div>
                 </div>
               </div>
 
@@ -307,9 +331,9 @@ export default function Dashboard() {
                   </svg>
                 </div>
                 <div className={s.cardContent}>
-                  <h3>Words Transcribed</h3>
-                  <div className={s.cardValue}>12,847</div>
-                  <div className={s.cardSubtext}>+1,234 today</div>
+                  <h3>Kata Ditranskripsi</h3>
+                  <div className={s.cardValue}>{statsLoading ? "…" : totalWords.toLocaleString("id-ID")}</div>
+                  <div className={s.cardSubtext}>Akumulasi dari transkripsi</div>
                 </div>
               </div>
 
@@ -320,68 +344,9 @@ export default function Dashboard() {
                   </svg>
                 </div>
                 <div className={s.cardContent}>
-                  <h3>Summaries Created</h3>
-                  <div className={s.cardValue}>18</div>
-                  <div className={s.cardSubtext}>+2 this week</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Informasi Aktivitas Summarize */}
-            <div className={s.activitySection}>
-              <h2>
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '8px', display: 'inline-block', verticalAlign: 'middle'}}>
-                  <line x1="18" y1="20" x2="18" y2="10"></line>
-                  <line x1="12" y1="20" x2="12" y2="4"></line>
-                  <line x1="6" y1="20" x2="6" y2="14"></line>
-                </svg>
-                Summarize Activity
-              </h2>
-              <div className={s.activityCard}>
-                <div className={s.activityHeader}>
-                  <div className={s.activityTitle}>Recent Summarization</div>
-                  <div className={s.activityStatus}>Active</div>
-                </div>
-                <div className={s.activityContent}>
-                  <div className={s.activityItem}>
-                    <div className={s.activityIcon}>
-                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="20 6 9 17 4 12"></polyline>
-                      </svg>
-                    </div>
-                    <div className={s.activityInfo}>
-                      <div className={s.activityName}>Meeting Notes Summary</div>
-                      <div className={s.activityTime}>2 minutes ago</div>
-                    </div>
-                    <div className={s.activityResult}>Success</div>
-                  </div>
-                  <div className={s.activityItem}>
-                    <div className={s.activityIcon}>
-                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="23 4 23 10 17 10"></polyline>
-                        <polyline points="1 20 1 14 7 14"></polyline>
-                        <path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10"></path>
-                        <path d="M20.49 15a9 9 0 0 1-14.13 3.36L1 14"></path>
-                      </svg>
-                    </div>
-                    <div className={s.activityInfo}>
-                      <div className={s.activityName}>Voice Recording Processing</div>
-                      <div className={s.activityTime}>5 minutes ago</div>
-                    </div>
-                    <div className={s.activityResult}>Processing</div>
-                  </div>
-                  <div className={s.activityItem}>
-                    <div className={s.activityIcon}>
-                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="20 6 9 17 4 12"></polyline>
-                      </svg>
-                    </div>
-                    <div className={s.activityInfo}>
-                      <div className={s.activityName}>Interview Transcription</div>
-                      <div className={s.activityTime}>1 hour ago</div>
-                    </div>
-                    <div className={s.activityResult}>Success</div>
-                  </div>
+                  <h3>Notulensi Dibuat</h3>
+                  <div className={s.cardValue}>{statsLoading ? "…" : totalNotes}</div>
+                  <div className={s.cardSubtext}>Total notulensi tersimpan</div>
                 </div>
               </div>
             </div>
@@ -393,10 +358,10 @@ export default function Dashboard() {
                   <circle cx="12" cy="12" r="10"></circle>
                   <polyline points="12,6 12,12 16,14"></polyline>
                 </svg>
-                Recent Summaries
+                Notulensi Terbaru
               </h2>
               <div className={s.recentList}>
-                {recentSummaries.map((item) => (
+                {recentNotes.map((item) => (
                   <div key={item.id} className={s.recentItem}>
                     <div className={s.recentIcon}>
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -409,11 +374,87 @@ export default function Dashboard() {
                     </div>
                     <div className={s.recentContent}>
                       <div className={s.recentTitle}>{item.title}</div>
-                      <div className={s.recentDesc}>{item.description}</div>
+                      <div className={s.recentDesc}>
+                        {item.summary?.slice(0, 120) || "Tidak ada ringkasan"}
+                        {item.summary?.length > 120 ? "…" : ""}
+                      </div>
                       <div className={s.recentTime}>{item.time}</div>
                     </div>
                   </div>
                 ))}
+                {(!recentNotes || recentNotes.length === 0) && (
+                  <div style={{ padding: '40px 20px', textAlign: 'center', color: '#6b7280' }}>
+                    <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ margin: '0 auto 16px', opacity: 0.5 }}>
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                      <polyline points="14,2 14,8 20,8"></polyline>
+                      <line x1="16" y1="13" x2="8" y2="13"></line>
+                      <line x1="16" y1="17" x2="8" y2="17"></line>
+                      <polyline points="10,9 9,9 8,9"></polyline>
+                    </svg>
+                    <p style={{ margin: '0 0 16px', fontSize: '16px', fontWeight: 500, color: '#1f2937' }}>Belum Ada Notulensi</p>
+                    <p style={{ margin: '0 0 24px', fontSize: '14px' }}>Mulai buat notulensi rapat pertama Anda sekarang!</p>
+                    <button 
+                      onClick={toggleListening}
+                      style={{
+                        padding: '10px 24px',
+                        background: 'linear-gradient(to right, #3b82f6, #2563eb)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      Mulai Rekam Sekarang
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Tips & Best Practices */}
+            <div style={{ marginTop: '32px' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px', color: '#1f2937' }}>
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '8px', display: 'inline-block', verticalAlign: 'middle'}}>
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                Tips & Panduan
+              </h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
+                <div style={{ background: '#f0f9ff', border: '1px solid #bfdbfe', borderRadius: '12px', padding: '20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                    <div style={{ fontSize: '24px', flexShrink: 0 }}>🎤</div>
+                    <div>
+                      <h3 style={{ margin: '0 0 8px', fontSize: '14px', fontWeight: '600', color: '#1e40af' }}>Mulai Rekaman</h3>
+                      <p style={{ margin: '0', fontSize: '13px', color: '#1e3a8a', lineHeight: '1.5' }}>Klik tombol "Start Listening" untuk memulai merekam suara rapat Anda</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '12px', padding: '20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                    <div style={{ fontSize: '24px', flexShrink: 0 }}>✨</div>
+                    <div>
+                      <h3 style={{ margin: '0 0 8px', fontSize: '14px', fontWeight: '600', color: '#92400e' }}>Ringkasan Otomatis</h3>
+                      <p style={{ margin: '0', fontSize: '13px', color: '#78350f', lineHeight: '1.5' }}>AI akan otomatis membuat ringkasan rapat Anda secara real-time</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                    <div style={{ fontSize: '24px', flexShrink: 0 }}>📤</div>
+                    <div>
+                      <h3 style={{ margin: '0 0 8px', fontSize: '14px', fontWeight: '600', color: '#166534' }}>Export & Bagikan</h3>
+                      <p style={{ margin: '0', fontSize: '13px', color: '#15803d', lineHeight: '1.5' }}>Simpan notulensi dalam format txt atau bagikan dengan tim Anda</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

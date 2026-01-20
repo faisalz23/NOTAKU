@@ -33,8 +33,11 @@ export default function VoicePanel({ apiBase = "" }: Props) {
   const [recognition, setRecognition] = useState<any>(null);
   const [manualStop, setManualStop] = useState(false);
   const manualStopRef = useRef<boolean>(false);
+  const [isRecording, setIsRecording] = useState(false);
   const [summarizeInFlight, setSummarizeInFlight] = useState(false);
   const [autoSummarizeEnabled] = useState(true);
+  const [micPromptOpen, setMicPromptOpen] = useState(false);
+  const [micPromptAccepted, setMicPromptAccepted] = useState(false);
 
   const fullTranscript = useRef<string>("");
   const lastFinalSummary = useRef<string>("");
@@ -158,16 +161,40 @@ export default function VoicePanel({ apiBase = "" }: Props) {
       setSocket(s);
       socketRef.current = s;
 
+      // Handler untuk auth_result
+      s.on("auth_result", (data: any) => {
+        console.log("🔐 Auth result:", data);
+        if (data?.ok) {
+          console.log("✅ Authentication successful");
+        } else {
+          console.error("❌ Authentication failed:", data?.error);
+        }
+      });
+
       // Optional: autentikasi eksplisit setelah connect
-      s.on("connect", () => {
+      s.on("connect", async () => {
         console.log("✅ Socket connected successfully");
         // Update socket state immediately after connect
         setSocket(s);
         socketRef.current = s;
-        if (token) {
-          console.log("🔐 Authenticating with token");
-          s!.emit("authenticate", { token });
+        
+        // Pastikan token fresh saat connect
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const freshToken = session?.access_token;
+          if (freshToken) {
+            console.log("🔐 Authenticating with fresh token");
+            s!.emit("authenticate", { token: freshToken });
+          } else if (token) {
+            console.log("🔐 Authenticating with initial token");
+            s!.emit("authenticate", { token });
+          } else {
+            console.warn("⚠️ No token available for authentication");
+          }
+        } catch (err) {
+          console.error("❌ Failed to get token on connect:", err);
         }
+        
         if (connectionStatusRef.current) {
           connectionStatusRef.current.textContent = "🟢 Terhubung";
           connectionStatusRef.current.style.color = "#22c55e";
@@ -201,15 +228,136 @@ export default function VoicePanel({ apiBase = "" }: Props) {
       });
 
       // Stream handler
-      s.on("summary_stream", (data: any) => {
+      s.on("summary_stream", async (data: any) => {
         console.log("📡 Received summary_stream data:", data);
         const editor = editorRef.current!;
         if (!editor) return;
 
         if (data?.error) {
           console.error("❌ Summary stream error:", data.error);
+          
+          // Jika unauthorized, coba re-authenticate dan retry
+          if (data.error === "unauthorized" || String(data.error).includes("unauthorized")) {
+            console.log("🔐 Unauthorized error detected, attempting re-authentication...");
+            try {
+              const { data: { session } } = await supabase.auth.getSession();
+              const token = session?.access_token;
+              
+              if (!token) {
+                console.error("❌ No token available");
+                showToast("Sesi kadaluarsa. Silakan login ulang.", "error");
+                setSummarizeInFlight(false);
+                hideProgress();
+                editor.classList.remove("loading");
+                return;
+              }
+              
+              if (s && s.connected) {
+                console.log("🔄 Re-authenticating socket with fresh token...");
+                
+                // Set up one-time listener untuk auth_result
+                const authHandler = (authData: any) => {
+                  s!.off("auth_result", authHandler);
+                  if (authData?.ok) {
+                    console.log("✅ Re-authentication successful, retrying summarize...");
+                    const text = transcriptRef.current?.value.trim() || "";
+                    if (text.length > 10) {
+                      // Reset state sebelum retry
+                      setSummarizeInFlight(false);
+                      setTimeout(() => {
+                        requestSummarize(text, false);
+                      }, 300);
+                    }
+                  } else {
+                    console.error("❌ Re-authentication failed:", authData?.error);
+                    showToast("Gagal autentikasi. Silakan login ulang.", "error");
+                    setSummarizeInFlight(false);
+                    hideProgress();
+                    editor.classList.remove("loading");
+                  }
+                };
+                
+                s.once("auth_result", authHandler);
+                s.emit("authenticate", { token });
+                
+                // Timeout jika auth tidak selesai dalam 3 detik - fallback ke HTTP
+                setTimeout(() => {
+                  s!.off("auth_result", authHandler);
+                  if (summarizeInFlight) {
+                    console.error("❌ Re-authentication timeout, falling back to HTTP");
+                    // Fallback ke HTTP summarize
+                    setSummarizeInFlight(false);
+                    const text = transcriptRef.current?.value.trim() || "";
+                    if (text.length > 10) {
+                      // Panggil HTTP fallback langsung
+                      (async () => {
+                        try {
+                          const { data: { session } } = await supabase.auth.getSession();
+                          const token = session?.access_token;
+                          if (!token) {
+                            showToast("Sesi kadaluarsa. Silakan login ulang.", "error");
+                            hideProgress();
+                            editor.classList.remove("loading");
+                            return;
+                          }
+                          
+                          setSummarizeInFlight(true);
+                          const res = await fetch(`${resolvedApiBase}/summarize`, {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                              Authorization: `Bearer ${token}`,
+                            },
+                            body: JSON.stringify({ text }),
+                          });
+                          const raw = await res.text();
+                          const data = raw ? JSON.parse(raw) : {};
+                          if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+                          const next = (data.summary || "").trim();
+                          const prev = lastFinalSummary.current || "";
+                          if (editorRef.current) {
+                            try {
+                              renderDiff(prev, next, editorRef.current);
+                            } catch {
+                              editorRef.current.innerHTML = mdToHtml(next);
+                            }
+                            editorRef.current.classList.remove("loading");
+                          }
+                          lastFinalSummary.current = next;
+                          updateCountDisplay(next);
+                          if (timestampRef.current)
+                            timestampRef.current.textContent = new Date().toLocaleString();
+                          showToast("Notulensi diperbarui (HTTP fallback)", "success");
+                        } catch (err: any) {
+                          showToast(`Gagal: ${err.message}`, "error");
+                        } finally {
+                          completeProgress();
+                          setSummarizeInFlight(false);
+                          editor.classList.remove("loading");
+                        }
+                      })();
+                    } else {
+                      hideProgress();
+                      editor.classList.remove("loading");
+                    }
+                  }
+                }, 3000);
+                
+                return;
+              } else {
+                console.error("❌ Socket not connected");
+                showToast("Koneksi terputus. Silakan refresh halaman.", "error");
+              }
+            } catch (err) {
+              console.error("❌ Re-authentication failed:", err);
+              showToast("Gagal autentikasi. Silakan login ulang.", "error");
+            }
+          } else {
+            showToast(data.message || data.error, "error");
+          }
+          
           setSummarizeInFlight(false);
-          showToast(data.message || data.error, "error");
           hideProgress();
           editor.classList.remove("loading");
           return;
@@ -278,7 +426,7 @@ export default function VoicePanel({ apiBase = "" }: Props) {
           setSummarizeInFlight(false);
           completeProgress();
           editor.classList.remove("loading");
-          showToast("Ringkasan final diperbarui", "success");
+          showToast("Notulensi final diperbarui", "success");
         }
       });
 
@@ -359,6 +507,7 @@ export default function VoicePanel({ apiBase = "" }: Props) {
   const start = () => {
     setManualStop(false);
     manualStopRef.current = false;
+    setIsRecording(true);
 
     // Reset UI hanya saat user klik Mulai
     if (transcriptRef.current) transcriptRef.current.value = "";
@@ -374,12 +523,30 @@ export default function VoicePanel({ apiBase = "" }: Props) {
       recognition?.start();
     } catch {
       showToast("Tidak bisa mulai (izin mic?)", "error");
+      setIsRecording(false);
     }
   };
+
+  const handleStartClick = () => {
+    if (!micPromptAccepted) {
+      setMicPromptOpen(true);
+      return;
+    }
+    start();
+  };
+
+  const confirmMicPrompt = () => {
+    setMicPromptAccepted(true);
+    setMicPromptOpen(false);
+    start();
+  };
+
+  const cancelMicPrompt = () => setMicPromptOpen(false);
 
   const stop = () => {
     setManualStop(true);
     manualStopRef.current = true;
+    setIsRecording(false);
     try {
       recognition?.stop();
     } catch {}
@@ -387,9 +554,10 @@ export default function VoicePanel({ apiBase = "" }: Props) {
     setSummarizeInFlight(false);
     hideProgress();
     editorRef.current?.classList.remove("loading");
+    showToast("Rekaman dihentikan", "success");
   };
 
-  const requestSummarize = (text: string, showUI = true) => {
+  const requestSummarize = async (text: string, showUI = true) => {
     console.log("🚀 requestSummarize called, text length:", text.length, "showUI:", showUI);
     if (summarizeInFlight || !text?.trim()) {
       console.log("❌ Request blocked - summarizeInFlight:", summarizeInFlight, "text empty:", !text?.trim());
@@ -411,10 +579,59 @@ export default function VoicePanel({ apiBase = "" }: Props) {
       return;
     }
 
+    // Pastikan token fresh sebelum emit
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      
+      if (!token) {
+        console.error("❌ No token available");
+        showToast("Sesi kadaluarsa. Silakan login ulang.", "error");
+        return;
+      }
+
+      // Re-authenticate socket dengan token fresh dan tunggu konfirmasi
+      const currentSocket = socketRef.current!;
+      if (currentSocket && currentSocket.connected) {
+        console.log("🔐 Ensuring socket is authenticated with fresh token...");
+        
+        // Gunakan Promise untuk menunggu auth_result
+        await new Promise<void>((resolve, reject) => {
+          const authHandler = (authData: any) => {
+            currentSocket.off("auth_result", authHandler);
+            if (authData?.ok) {
+              console.log("✅ Socket authenticated successfully");
+              resolve();
+            } else {
+              console.error("❌ Authentication failed:", authData?.error);
+              reject(new Error(authData?.error || "Authentication failed"));
+            }
+          };
+          
+          currentSocket.once("auth_result", authHandler);
+          currentSocket.emit("authenticate", { token });
+          
+          // Timeout setelah 2 detik
+          setTimeout(() => {
+            currentSocket.off("auth_result", authHandler);
+            reject(new Error("Authentication timeout"));
+          }, 2000);
+        });
+      } else {
+        console.error("❌ Socket not connected");
+        showToast("Koneksi terputus. Silakan refresh halaman.", "error");
+        return;
+      }
+    } catch (err: any) {
+      console.error("❌ Failed to authenticate:", err);
+      showToast(err.message || "Gagal autentikasi. Silakan login ulang.", "error");
+      return;
+    }
+
     setSummarizeInFlight(true);
 
     if (showUI) {
-      if (editorRef.current) editorRef.current.innerText = "Memproses ringkasan...";
+      if (editorRef.current) editorRef.current.innerText = "Memproses notulensi...";
       if (charCountRef.current) charCountRef.current.textContent = "Memproses...";
       showProgress();
       editorRef.current?.classList.add("loading");
@@ -469,7 +686,7 @@ export default function VoicePanel({ apiBase = "" }: Props) {
           updateCountDisplay(next);
           if (timestampRef.current)
             timestampRef.current.textContent = new Date().toLocaleString();
-          showToast("Ringkasan diperbarui (HTTP)", "success");
+          showToast("Notulensi diperbarui (HTTP)", "success");
         } catch (err: any) {
           showToast(`Gagal fallback HTTP: ${err.message}`, "error");
         } finally {
@@ -510,8 +727,8 @@ export default function VoicePanel({ apiBase = "" }: Props) {
 
   return (
     <div className="vp">
-      <h2 style={{ textAlign: "center", margin: "8px 0 16px", color: "#1862d8" }}>
-        🎙️ Realtime Voice to Text
+      <h2 style={{ textAlign: "center", margin: "8px 0 16px", color: "#1e293b" }}>
+        🎙️ Notulensi Rapat Otomatis
       </h2>
 
       {/* Status koneksi (opsional tampilkan di UI-mu) */}
@@ -526,15 +743,36 @@ export default function VoicePanel({ apiBase = "" }: Props) {
           <textarea
             ref={transcriptRef}
             id="transcript"
-            placeholder="Transkrip akan muncul di sini..."
+            placeholder="Transkripsi rapat akan muncul di sini..."
             readOnly
           />
           <div className="btn-group">
-            <button id="startBtn" onClick={start}>
+            <button 
+              id="startBtn" 
+              onClick={handleStartClick}
+              style={{
+                opacity: isRecording ? 0.6 : 1,
+                cursor: isRecording ? "not-allowed" : "pointer",
+              }}
+              disabled={isRecording}
+            >
               Mulai
             </button>
-            <button id="stopBtn" onClick={stop}>
-              Stop
+            <button 
+              id="stopBtn" 
+              onClick={stop}
+              style={{
+                background: isRecording ? "#ef4444" : "#6b7280",
+                color: "#ffffff",
+                opacity: isRecording ? 1 : 0.6,
+                cursor: isRecording ? "pointer" : "not-allowed",
+                transition: "all 0.3s ease",
+                boxShadow: isRecording ? "0 0 12px rgba(239, 68, 68, 0.5)" : "none",
+                transform: isRecording ? "scale(1)" : "scale(0.95)",
+              }}
+              disabled={!isRecording}
+            >
+              {isRecording ? "⏹ Menghentikan..." : "Stop"}
             </button>
           </div>
         </div>
@@ -555,7 +793,7 @@ export default function VoicePanel({ apiBase = "" }: Props) {
     id="summaryEditor"
     className="editor"
     contentEditable
-    data-placeholder="Ringkasan akan muncul di sini..."
+    data-placeholder="Notulensi rapat akan muncul di sini..."
     onInput={() =>
       updateCountDisplay(editorRef.current?.textContent?.trim() || "")
     }
@@ -572,7 +810,7 @@ export default function VoicePanel({ apiBase = "" }: Props) {
         const transcriptText = transcriptRef.current?.value?.trim();
 
         if (!summaryText) {
-          showToast("Tidak ada ringkasan untuk disimpan.", "error");
+          showToast("Tidak ada notulensi untuk disimpan.", "error");
           return;
         }
 
@@ -587,21 +825,146 @@ export default function VoicePanel({ apiBase = "" }: Props) {
           }
 
           const user = session.user;
-          const { error } = await supabase.from("summaries").insert([
-            {
-              user_id: user.id,
-              transcript: transcriptText || "",
-              summary: summaryText,
-              created_at: new Date().toISOString(),
-            },
-          ]);
+          
+          // Generate title dari summary (ambil 50 karakter pertama)
+          const title = summaryText.substring(0, 50).replace(/\n/g, " ").trim() + (summaryText.length > 50 ? "..." : "");
+          
+          // Hitung durasi dari panjang transcript (estimasi: ~150 kata per menit)
+          const wordCount = (transcriptText || "").split(/\s+/).filter(Boolean).length;
+          const estimatedMinutes = Math.max(1, Math.round(wordCount / 150));
+          const duration = estimatedMinutes === 1 ? "1 menit" : `${estimatedMinutes} menit`;
 
-          if (error) throw error;
+          console.log("💾 Menyimpan notulensi ke Supabase...", {
+            user_id: user.id,
+            title: title,
+            transcript_length: transcriptText?.length || 0,
+            summary_length: summaryText.length,
+          });
 
-          showToast("Ringkasan berhasil disimpan!", "success");
+          const nowIso = new Date().toISOString();
+
+          // 1) Buat record meeting (status: finished, waktu sekarang)
+          const { data: meetingRow, error: meetingError } = await supabase
+            .from("meetings")
+            .insert([
+              {
+                user_id: user.id,
+                title: title || "Notulensi Rapat",
+                status: "finished",
+                started_at: nowIso,
+                finished_at: nowIso,
+                created_at: nowIso,
+              },
+            ])
+            .select("meeting_id")
+            .single();
+
+          if (meetingError || !meetingRow) {
+            console.error("❌ Gagal membuat meeting:", meetingError);
+            showToast("Gagal membuat data meeting. Pastikan tabel 'meetings' sudah dibuat dan RLS mengizinkan.", "error");
+            return;
+          }
+
+          // 2) Simpan notulensi ke tabel notes (relasi ke meeting_id)
+          const insertNote = {
+            meeting_id: meetingRow.meeting_id,
+            transcript_text: transcriptText || "",
+            summary_content: summaryText,
+            is_shared: false,
+            created_at: nowIso,
+          };
+
+          console.log("📤 Data yang akan disimpan ke notes:", insertNote);
+
+          const { data, error, status, statusText } = await supabase
+            .from("notes")
+            .insert([insertNote])
+            .select("note_id")
+            .single();
+
+          if (error) {
+            // Log semua informasi yang tersedia
+            console.error("❌ Supabase error object:", error);
+            console.error("❌ Error properties:", Object.keys(error));
+            console.error("❌ Error values:", {
+              message: error?.message,
+              code: error?.code,
+              details: error?.details,
+              hint: error?.hint,
+              status: status,
+              statusText: statusText,
+            });
+            
+            // Coba akses error dengan berbagai cara
+            let errorMsg = "Gagal menyimpan notulensi";
+            
+            // Cek semua property yang mungkin ada
+            const errorProps = {
+              message: (error as any)?.message,
+              code: (error as any)?.code,
+              details: (error as any)?.details,
+              hint: (error as any)?.hint,
+              error: (error as any)?.error,
+              status: status,
+              statusText: statusText,
+            };
+            
+            console.error("❌ All error properties:", errorProps);
+            
+            // Prioritaskan message, lalu code, lalu details
+            if (errorProps.message) {
+              errorMsg = errorProps.message;
+            } else if (errorProps.code) {
+              errorMsg = `Error code: ${errorProps.code}`;
+              if (errorProps.details) errorMsg += ` - ${errorProps.details}`;
+              if (errorProps.hint) errorMsg += ` (${errorProps.hint})`;
+            } else if (errorProps.details) {
+              errorMsg = errorProps.details;
+            } else if (errorProps.error) {
+              errorMsg = String(errorProps.error);
+            } else {
+              // Jika semua kosong, kemungkinan besar table belum dibuat atau RLS issue
+              errorMsg = "Tabel 'notes' atau 'meetings' belum siap, atau RLS tidak mengizinkan insert. Pastikan sudah menjalankan SQL di backend/setup_database.sql.";
+            }
+            
+            throw new Error(errorMsg);
+          }
+
+          console.log("✅ Notulensi berhasil disimpan:", data);
+          showToast("Notulensi berhasil disimpan!", "success");
+          
+          // Reset setelah simpan (opsional)
+          // Bisa di-comment jika ingin tetap menampilkan notulensi
+          // if (transcriptRef.current) transcriptRef.current.value = "";
+          // if (editorRef.current) editorRef.current.innerHTML = "";
         } catch (err: any) {
           console.error("❌ Gagal menyimpan:", err);
-          showToast("Gagal menyimpan ringkasan.", "error");
+          
+          // Handle berbagai jenis error
+          let errorMessage = "Gagal menyimpan notulensi.";
+          
+          if (err.message) {
+            errorMessage = err.message;
+          } else if (err.code) {
+            errorMessage = `Error ${err.code}: ${err.message || "Unknown error"}`;
+          } else if (typeof err === "string") {
+            errorMessage = err;
+          } else if (err.error) {
+            errorMessage = err.error.message || JSON.stringify(err.error);
+          } else {
+            errorMessage = JSON.stringify(err);
+          }
+          
+          // Pesan yang lebih user-friendly
+          if (errorMessage.includes("relation") && errorMessage.includes("does not exist")) {
+            errorMessage = "Tabel 'meetings' atau 'notes' belum dibuat. Jalankan SQL di backend/setup_database.sql.";
+          } else if (errorMessage.includes("permission denied") || errorMessage.includes("RLS")) {
+            errorMessage = "Permission denied. Pastikan Row Level Security policy sudah dibuat dengan benar.";
+          } else if (errorMessage.includes("new row violates row-level security")) {
+            errorMessage = "Row Level Security policy tidak mengizinkan insert. Periksa policy di Supabase.";
+          }
+          
+          showToast(errorMessage, "error");
         }
       }}
       style={{
@@ -619,6 +982,76 @@ export default function VoicePanel({ apiBase = "" }: Props) {
 </div>
 
       </div>
+
+      {/* Modal izin mic (custom) */}
+      {micPromptOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: 16,
+          }}
+          aria-modal="true"
+          role="dialog"
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              padding: "20px",
+              maxWidth: 440,
+              width: "100%",
+              boxShadow: "0 20px 40px rgba(0,0,0,0.18)",
+            }}
+          >
+            <h3 style={{ margin: "0 0 8px", fontWeight: 700, color: "#0f172a" }}>
+              Izinkan mikrofon?
+            </h3>
+            <p style={{ margin: "0 0 12px", color: "#475569", lineHeight: 1.5 }}>
+              Aplikasi perlu akses mikrofon untuk transkripsi real-time. Klik “Izinkan & Mulai”
+              untuk memulai rekaman.
+            </p>
+            <ul style={{ margin: "0 0 16px 16px", color: "#475569", lineHeight: 1.5, fontSize: 14 }}>
+              <li>Pastikan perangkat mic terpilih di sistem/browser.</li>
+              <li>Izin bisa diubah di pengaturan situs browser jika sebelumnya ditolak.</li>
+            </ul>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button
+                onClick={cancelMicPrompt}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 10,
+                  border: "1px solid #e2e8f0",
+                  background: "#fff",
+                  color: "#0f172a",
+                  cursor: "pointer",
+                }}
+              >
+                Batal
+              </button>
+              <button
+                onClick={confirmMicPrompt}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 10,
+                  border: "none",
+                  background: "#1862d8",
+                  color: "#fff",
+                  cursor: "pointer",
+                  boxShadow: "0 10px 24px rgba(24,98,216,0.35)",
+                }}
+              >
+                Izinkan & Mulai
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div ref={toastRef} id="toast" className="toast" />
     </div>

@@ -3,11 +3,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 
-type RoleMeta = "dokter_patologi" | "dokter_hewan";
-function roleToMode(role?: string): "patologi" | "dokter_hewan" {
-  return role === "dokter_hewan" ? "dokter_hewan" : "patologi";
-}
-
 export default function LoginPage() {
   const router = useRouter();
   const supabase = supabaseBrowser();
@@ -17,13 +12,6 @@ export default function LoginPage() {
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
-
-  const persistRoleLocally = (role?: string) => {
-    const mode = roleToMode(role);
-    // dipakai VoicePanel untuk menentukan 'mode' saat stream/HTTP
-    localStorage.setItem("role", role || "dokter_patologi");
-    localStorage.setItem("summaryMode", mode);
-  };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,21 +26,6 @@ export default function LoginPage() {
       return;
     }
 
-    // Ambil user & role setelah sign-in
-    const { data: { user }, error: userErr } = await supabase.auth.getUser();
-    if (userErr) {
-      setErr(userErr.message);
-      return;
-    }
-
-    const role = (user?.user_metadata?.role as RoleMeta | undefined);
-    if (!role) {
-      // belum punya role -> arahkan ke onboarding pilih peran
-      router.push("/onboarding/role?next=/dashboard");
-      return;
-    }
-
-    persistRoleLocally(role);
     router.push("/dashboard");
   };
 
@@ -159,7 +132,7 @@ export default function LoginPage() {
       </div>
 
       <div className="image-side">
-        <img src="/login.jpg" alt="Login Illustration" />
+        <img src="/loginbaru.png" alt="Login Illustration" />
       </div>
     </div>
   );

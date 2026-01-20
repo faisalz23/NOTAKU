@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { useRouter, useParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabaseClient";
+import SharePopup from "@/app/components/SharePopup";
 import s from "@/app/styles/dashboard.module.css";
 import d from "@/app/styles/detail.module.css";
 
@@ -27,15 +28,15 @@ const SAMPLE_DATA: { [key: string]: HistoryItem } = {
     id: "1",
     date: "15 Januari 2025, 14:30",
     duration: "2 menit 15 detik",
-    transcript: 'Halo, ini adalah contoh transkrip dari sesi voice to text. Sistem ini bekerja dengan baik untuk mengkonversi suara menjadi teks secara real-time. Kemudian AI akan meringkas konten ini menjadi format yang lebih mudah dibaca. Proses ini melibatkan beberapa tahap yaitu capture audio, speech recognition, dan natural language processing untuk menghasilkan ringkasan yang akurat.',
-    summary: "Sesi voice to text berhasil mengkonversi suara menjadi teks dengan baik. Sistem bekerja real-time dan AI merangkum konten menjadi format yang mudah dibaca.",
+    transcript: 'Selamat siang semua, hari ini kita akan membahas progress proyek yang sedang berjalan. Tim development sudah menyelesaikan fitur utama dan sedang dalam tahap testing. Kita perlu koordinasi untuk deployment minggu depan. Selain itu, ada beberapa bug yang perlu diperbaiki sebelum release.',
+    summary: "Rapat membahas progress proyek. Tim development telah menyelesaikan fitur utama dan sedang testing. Perlu koordinasi untuk deployment minggu depan dan perbaikan bug sebelum release.",
   },
   "2": {
     id: "2", 
     date: "15 Januari 2025, 10:15",
     duration: "1 menit 45 detik",
-    transcript: "Testing sistem voice recognition untuk memastikan semua fitur berfungsi dengan baik. Ini adalah uji coba kedua untuk memverifikasi kualitas transkripsi dan ringkasan AI. Hasilnya menunjukkan bahwa sistem dapat menangkap audio dengan jelas dan mengkonversinya menjadi teks yang akurat.",
-    summary: "Uji coba sistem voice recognition berhasil. Fitur transkripsi dan ringkasan AI berfungsi dengan baik.",
+    transcript: "Rapat koordinasi tim untuk membahas timeline dan resource yang dibutuhkan. Kita perlu memastikan semua anggota tim memahami tugas masing-masing dan deadline yang telah ditetapkan. Ada beberapa kendala yang perlu diselesaikan bersama.",
+    summary: "Rapat koordinasi membahas timeline dan resource. Perlu memastikan semua anggota memahami tugas dan deadline, serta menyelesaikan kendala bersama.",
   },
 };
 
@@ -53,6 +54,9 @@ export default function DetailPage() {
 
   // detail data
   const [detailData, setDetailData] = useState<HistoryItem | null>(null);
+  
+  // share popup
+  const [showSharePopup, setShowSharePopup] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -81,13 +85,73 @@ export default function DetailPage() {
 
   // Load detail data
   useEffect(() => {
-    if (id && SAMPLE_DATA[id]) {
-      setDetailData(SAMPLE_DATA[id]);
-    } else {
-      // If data not found, redirect to history
-      router.replace("/history");
-    }
-  }, [id, router]);
+    let mounted = true;
+    (async () => {
+      if (!id) return;
+      
+      try {
+        // First try SAMPLE_DATA for backward compatibility
+        if (SAMPLE_DATA[id]) {
+          if (mounted) setDetailData(SAMPLE_DATA[id]);
+          return;
+        }
+
+        // Try to load from database using note_id
+        const { data, error } = await supabase
+          .from("notes")
+          .select(`
+            note_id,
+            transcript_text,
+            summary_content,
+            created_at,
+            meetings:meeting_id ( title, started_at, finished_at, user_id )
+          `)
+          .eq("note_id", id)
+          .single();
+
+        if (error) {
+          console.error("Error loading detail:", error);
+          if (mounted) router.replace("/history");
+          return;
+        }
+
+        if (mounted && data) {
+          const date = new Date(data.created_at || Date.now());
+          const formattedDate = date.toLocaleDateString("id-ID", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+
+          let duration = "Tidak diketahui";
+          if (data.meetings?.started_at && data.meetings?.finished_at) {
+            const start = new Date(data.meetings.started_at);
+            const end = new Date(data.meetings.finished_at);
+            const diffMin = Math.max(1, Math.round((end.getTime() - start.getTime()) / 60000));
+            duration = diffMin === 1 ? "1 menit" : `${diffMin} menit`;
+          }
+
+          setDetailData({
+            id: data.note_id,
+            title: data.meetings?.title || "Notulensi Rapat",
+            date: formattedDate,
+            duration,
+            transcript: data.transcript_text || "",
+            summary: data.summary_content || "",
+          });
+        }
+      } catch (err: any) {
+        console.error("Error fetching note detail:", err);
+        if (mounted) router.replace("/history");
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [id, router, supabase]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -123,7 +187,7 @@ export default function DetailPage() {
   };
 
   const handleDelete = () => {
-    if (confirm("Are you sure you want to delete this transcription?")) {
+    if (confirm("Apakah Anda yakin ingin menghapus notulensi rapat ini?")) {
       // In real app, this would delete from database
       router.push("/history");
     }
@@ -131,12 +195,12 @@ export default function DetailPage() {
 
   const handleExport = () => {
     if (detailData) {
-      const content = `Transcription Detail\n\nDate: ${detailData.date}\nDuration: ${detailData.duration}\n\nTranscript:\n${detailData.transcript}\n\nSummary:\n${detailData.summary}`;
+      const content = `Notulensi Rapat\n\nTanggal: ${detailData.date}\nDurasi: ${detailData.duration}\n\nTranskripsi:\n${detailData.transcript}\n\nNotulensi:\n${detailData.summary}`;
       const blob = new Blob([content], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `transcription-${detailData.id}.txt`;
+      a.download = `notulensi-rapat-${detailData.id}.txt`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -173,14 +237,7 @@ export default function DetailPage() {
       <aside className={s.sidebar}>
         <div className={s.sbInner}>
           <div className={s.brand}>
-            <Image
-              src="/logo_neurabot.jpg"
-              alt="Logo Neurabot"
-              width={36}
-              height={36}
-              className={s.brandImg}
-            />
-            <div className={s.brandName}>Neurabot</div>
+            <div className={s.brandName}>NotaKu</div>
           </div>
 
           <nav className={s.nav} aria-label="Sidebar">
@@ -208,7 +265,7 @@ export default function DetailPage() {
           </nav>
 
           <div className={s.sbFooter}>
-            <div style={{ opacity: 0.6 }}>© 2025 Neurabot</div>
+            <div style={{ opacity: 0.6 }}>© 2025 NotaKu</div>
           </div>
         </div>
       </aside>
@@ -259,7 +316,7 @@ export default function DetailPage() {
           {/* Header */}
           <div className={d.detailHeader}>
             <div className={d.headerInfo}>
-              <h1 className={d.detailTitle}>Transcription Details</h1>
+              <h1 className={d.detailTitle}>Detail Notulensi Rapat</h1>
               <div className={d.detailMeta}>
                 <div className={d.metaItem}>
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -289,7 +346,7 @@ export default function DetailPage() {
                 </svg>
                 Export
               </button>
-              <button className={d.actionButton} onClick={() => alert('Share functionality coming soon!')}>
+              <button className={d.actionButton} onClick={() => setShowSharePopup(true)}>
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="18" cy="5" r="3"></circle>
                   <circle cx="6" cy="12" r="3"></circle>
@@ -314,7 +371,7 @@ export default function DetailPage() {
                     <line x1="12" y1="19" x2="12" y2="23"></line>
                     <line x1="8" y1="23" x2="16" y2="23"></line>
                   </svg>
-                  Full Transcript
+                  Transkripsi Lengkap
                 </h2>
                 <button className={d.copyButton} onClick={() => handleCopy(detailData.transcript)}>
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -340,7 +397,7 @@ export default function DetailPage() {
                     <line x1="16" y1="17" x2="8" y2="17"></line>
                     <polyline points="10,9 9,9 8,9"></polyline>
                   </svg>
-                  AI Summary
+                  Notulensi Rapat
                 </h2>
                 <button className={d.copyButton} onClick={() => handleCopy(detailData.summary)}>
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -370,6 +427,14 @@ export default function DetailPage() {
           </div>
         </div>
       </main>
+
+      {/* Share Popup */}
+      <SharePopup
+        isOpen={showSharePopup}
+        onClose={() => setShowSharePopup(false)}
+        documentId={id}
+        documentTitle={`Notulensi Rapat ${detailData?.date || ''}`}
+      />
     </div>
   );
 }

@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabaseClient";
+import SharePopup from "@/app/components/SharePopup";
 import s from "@/app/styles/dashboard.module.css"; // reuse layout styles
 import h from "@/app/styles/history.module.css";   // styles khusus history
 
@@ -15,36 +16,19 @@ type UserMeta = {
 
 type HistoryItem = {
   id: string;
+  title?: string;
   date: string;       
   duration: string;   
   transcript: string;
   summary: string;
+  created_at?: string;
 };
-
-const SAMPLE: HistoryItem[] = [
-  {
-    id: "1",
-    date: "15 Januari 2025, 14:30",
-    duration: "2 menit 15 detik",
-    transcript:
-      'Halo, ini adalah contoh transkrip dari sesi voice to text. Sistem ini bekerja dengan baik untuk mengkonversi suara menjadi teks secara real-time. Kemudian AI akan meringkas konten ini menjadi format yang lebih mudah dibaca.',
-    summary:
-      "Sesi voice to text berhasil mengkonversi suara menjadi teks dengan baik. Sistem bekerja real-time dan AI merangkum konten menjadi format yang mudah dibaca.",
-  },
-  {
-    id: "2",
-    date: "15 Januari 2025, 10:15",
-    duration: "1 menit 45 detik",
-    transcript:
-      "Testing sistem voice recognition untuk memastikan semua fitur berfungsi dengan baik. Ini adalah uji coba kedua untuk memverifikasi kualitas transkripsi dan ringkasan AI.",
-    summary:
-      "Uji coba sistem voice recognition berhasil. Fitur transkripsi dan ringkasan AI berfungsi dengan baik.",
-  },
-];
 
 export default function HistoryPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const supabase = supabaseBrowser();
+  const avatarRef = useRef<HTMLDivElement | null>(null);
 
   // auth/session
   const [loading, setLoading] = useState(true);
@@ -58,8 +42,17 @@ export default function HistoryPage() {
   const toggleSidebar = () => setSidebarOpen((v) => !v);
   
   const [query, setQuery] = useState("");
-  const [items, setItems] = useState<HistoryItem[]>(SAMPLE);
+  const [items, setItems] = useState<HistoryItem[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<HistoryItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [showSharePopup, setShowSharePopup] = useState(false);
+  const [shareTarget, setShareTarget] = useState<HistoryItem | null>(null);
+  const [successModalOpen, setSuccessModalOpen] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
 
+  // Load history from Supabase
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -73,6 +66,61 @@ export default function HistoryPage() {
       setEmail(session.user.email || "");
       setMeta((session.user.user_metadata as UserMeta) || {});
       setLoading(false);
+
+      // Load history dari tabel notes (join meetings)
+      try {
+        const { data, error } = await supabase
+          .from("notes")
+          .select(`
+            note_id,
+            transcript_text,
+            summary_content,
+            created_at,
+            meetings:meeting_id ( title, started_at, finished_at, user_id )
+          `)
+          .eq("meetings.user_id", session.user.id)
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+
+        if (mounted && data) {
+          const formattedItems: HistoryItem[] = data.map((item: any) => {
+            const date = new Date(item.created_at || Date.now());
+            const formattedDate = date.toLocaleDateString("id-ID", {
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+
+            // Estimasi durasi dari started_at/finished_at jika ada
+            let duration = "Tidak diketahui";
+            if (item.meetings?.started_at && item.meetings?.finished_at) {
+              const start = new Date(item.meetings.started_at);
+              const end = new Date(item.meetings.finished_at);
+              const diffMin = Math.max(1, Math.round((end.getTime() - start.getTime()) / 60000));
+              duration = diffMin === 1 ? "1 menit" : `${diffMin} menit`;
+            }
+
+            return {
+              id: item.note_id,
+              title: item.meetings?.title || "Notulensi Rapat",
+              date: formattedDate,
+              duration,
+              transcript: item.transcript_text || "",
+              summary: item.summary_content || "",
+              created_at: item.created_at,
+            };
+          });
+          setItems(formattedItems);
+        }
+      } catch (err: any) {
+        console.error("Error loading history:", err);
+        if (mounted) setItems([]);
+      } finally {
+        if (mounted) setLoadingHistory(false);
+      }
     })();
 
     const { data: sub } = supabase.auth.onAuthStateChange((_e, sess) => {
@@ -108,19 +156,17 @@ export default function HistoryPage() {
     return () => window.removeEventListener('resize', checkMobile);
   }, [isMobile, sidebarOpen]);
 
-  // Close dropdown when clicking outside
+  // Close dropdown when clicking outside (only attach listener while open)
   useEffect(() => {
+    if (!showProfileDropdown) return;
     const handleClickOutside = (event: MouseEvent) => {
-      if (showProfileDropdown) {
-        const target = event.target as Element;
-        if (!target.closest(`.${s.avatar}`)) {
-          setShowProfileDropdown(false);
-        }
-      }
+      const target = event.target as Node | null;
+      const host = avatarRef.current;
+      if (host && target && !host.contains(target)) setShowProfileDropdown(false);
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showProfileDropdown]);
 
   const username = meta.username || email.split("@")[0] || "User";
@@ -147,10 +193,67 @@ export default function HistoryPage() {
     }
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm("Apakah Anda yakin ingin menghapus riwayat ini?")) {
-      setItems((prev) => prev.filter((x) => x.id !== id));
+  const handleExport = (item: HistoryItem) => {
+    try {
+      console.log("Export started for:", item);
+      const content = `Notulensi Rapat\n\nJudul: ${item.title}\nTanggal: ${item.date}\nDurasi: ${item.duration}\n\nTranskripsi:\n${item.transcript}\n\nNotulensi:\n${item.summary}`;
+      const blob = new Blob([content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `notulensi-rapat-${item.id}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      console.log("Export completed");
+      setSuccessMessage("Notulensi berhasil diunduh ✅");
+      setSuccessModalOpen(true);
+      setTimeout(() => setSuccessModalOpen(false), 2000);
+    } catch (err) {
+      console.error("Error exporting:", err);
+      setSuccessMessage("Gagal mengunduh notulensi.");
+      setSuccessModalOpen(true);
+      setTimeout(() => setSuccessModalOpen(false), 2000);
     }
+  };
+
+  const handleShare = (item: HistoryItem) => {
+    console.log("Share clicked for:", item);
+    setShareTarget(item);
+    setShowSharePopup(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      const { error } = await supabase.from("notes").delete().eq("note_id", id);
+
+      if (error) throw error;
+
+      setItems((prev) => prev.filter((x) => x.id !== id));
+      alert("Riwayat berhasil dihapus ✅");
+    } catch (err: any) {
+      console.error("Error deleting history:", err);
+      alert("Gagal menghapus riwayat. Silakan coba lagi.");
+    }
+  };
+
+  const openDeleteModal = (item: HistoryItem) => {
+    setDeleteTarget(item);
+    setDeleteModalOpen(true);
+  };
+
+  const closeDeleteModal = () => {
+    setDeleteModalOpen(false);
+    setDeleteTarget(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    await handleDelete(deleteTarget.id);
+    setDeleting(false);
+    closeDeleteModal();
   };
 
   const onLogout = async () => {
@@ -166,11 +269,11 @@ export default function HistoryPage() {
     setShowProfileDropdown(false);
   };
 
-  if (loading) {
+  if (loading || loadingHistory) {
     return (
       <div className={s.app}>
         <main className={s.content}>
-          <div className={s.card}>Loading history...</div>
+          <div className={s.card}>Memuat riwayat...</div>
         </main>
       </div>
     );
@@ -185,32 +288,37 @@ export default function HistoryPage() {
       <aside className={`${s.sidebar} ${sidebarOpen ? "" : s.sidebarCollapsed}`}>
         <div className={s.sbInner}>
           <div className={s.brand}>
-            <Image
-              src="/logo_neurabot.jpg"
-              alt="Logo Neurabot"
-              width={40}
-              height={40}
-              className={s.brandImg}
-            />
-            <div className={s.brandName}>Neurabot</div>
+            <div className={s.brandName}>NotaKu</div>
           </div>
 
           <nav className={s.nav} aria-label="Sidebar">
-            <a className={s.navItem} href="/dashboard" onClick={() => isMobile && setSidebarOpen(false)}>
+            <a
+              className={`${s.navItem} ${pathname === "/dashboard" ? s.active : ""}`}
+              href="/dashboard"
+              onClick={() => isMobile && setSidebarOpen(false)}
+            >
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
                 <polyline points="9,22 9,12 15,12 15,22"></polyline>
               </svg>
               <span>Dashboard</span>
             </a>
-            <a className={s.navItem} href="/history" onClick={() => isMobile && setSidebarOpen(false)}>
+            <a
+              className={`${s.navItem} ${pathname === "/history" ? s.active : ""}`}
+              href="/history"
+              onClick={() => isMobile && setSidebarOpen(false)}
+            >
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10"></circle>
                 <polyline points="12,6 12,12 16,14"></polyline>
               </svg>
               <span>History</span>
             </a>
-            <a className={s.navItem} href="/settings" onClick={() => isMobile && setSidebarOpen(false)}>
+            <a
+              className={`${s.navItem} ${pathname === "/settings" ? s.active : ""}`}
+              href="/settings"
+              onClick={() => isMobile && setSidebarOpen(false)}
+            >
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="3"></circle>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
@@ -220,7 +328,7 @@ export default function HistoryPage() {
           </nav>
 
           <div className={s.sbFooter}>
-            <div style={{ opacity: 0.6 }}>© 2025 Neurabot</div>
+            <div style={{ opacity: 0.6 }}>© 2025 NotaKu</div>
           </div>
         </div>
       </aside>
@@ -254,7 +362,7 @@ export default function HistoryPage() {
           </div>
 
           <div className={s.rightGroup}>
-            <div className={s.avatar} onClick={toggleProfileDropdown}>
+            <div className={s.avatar} onClick={toggleProfileDropdown} ref={avatarRef}>
               <Image
                 src={avatar}
                 alt="Foto profil"
@@ -299,27 +407,7 @@ export default function HistoryPage() {
       <main className={s.content}>
         <div className={h.historyContainer}>
           <div className={h.historyHeader}>
-            <h2 className={h.title}>Transcription History</h2>
-            <div className={h.headerActions}>
-              <button className={h.actionButton} onClick={() => alert('Export functionality coming soon!')}>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                  <polyline points="7,10 12,15 17,10"></polyline>
-                  <line x1="12" y1="15" x2="12" y2="3"></line>
-                </svg>
-                Export
-              </button>
-              <button className={h.actionButton} onClick={() => alert('Share functionality coming soon!')}>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="18" cy="5" r="3"></circle>
-                  <circle cx="6" cy="12" r="3"></circle>
-                  <circle cx="18" cy="19" r="3"></circle>
-                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-                </svg>
-                Share
-              </button>
-            </div>
+            <h2 className={h.title}>Riwayat Notulensi Rapat</h2>
           </div>
 
           {filtered.length === 0 ? (
@@ -331,8 +419,8 @@ export default function HistoryPage() {
                   <path d="M3 3v5h5"></path>
                 </svg>
               </div>
-              <h3>No History Yet</h3>
-              <p>Start using Voice to Text to see your transcription history and summaries here.</p>
+              <h3>Belum Ada Riwayat</h3>
+              <p>Mulai gunakan Notulensi Rapat untuk melihat riwayat transkripsi dan notulensi Anda di sini. Setelah menyimpan notulensi, data akan muncul di sini.</p>
             </div>
           ) : (
             <div className={h.historyGrid}>
@@ -349,16 +437,22 @@ export default function HistoryPage() {
                         </svg>
                       </span>
                       {it.date}
+                      {it.duration && (
+                        <>
+                          <span style={{ margin: "0 8px", opacity: 0.5 }}>•</span>
+                          <span style={{ fontSize: "12px", opacity: 0.7 }}>{it.duration}</span>
+                        </>
+                      )}
                     </div>
                     <div className={h.cardTopActions}>
-                      <button className={h.exportBtn} onClick={() => alert('Export functionality coming soon!')} title="Export">
+                      <button className={h.exportBtn} onClick={() => handleExport(it)} title="Export">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                           <polyline points="7,10 12,15 17,10"></polyline>
                           <line x1="12" y1="15" x2="12" y2="3"></line>
                         </svg>
                       </button>
-                      <button className={h.shareBtn} onClick={() => alert('Share functionality coming soon!')} title="Share">
+                      <button className={h.shareBtn} onClick={() => handleShare(it)} title="Share">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <circle cx="18" cy="5" r="3"></circle>
                           <circle cx="6" cy="12" r="3"></circle>
@@ -381,7 +475,7 @@ export default function HistoryPage() {
                             <line x1="8" y1="23" x2="16" y2="23"></line>
                           </svg>
                         </span>
-                        Transcript
+                        Transkripsi
                       </h4>
                       <div className={h.transcriptText}>
                         {it.transcript}
@@ -399,7 +493,7 @@ export default function HistoryPage() {
                             <polyline points="10,9 9,9 8,9"></polyline>
                           </svg>
                         </span>
-                        Summary
+                        Notulensi
                       </h4>
                       <div className={h.summaryText}>
                         {it.summary}
@@ -426,7 +520,7 @@ export default function HistoryPage() {
                       </span>
                       Copy
                     </button>
-                    <button className={`${h.actionBtn} ${h.dangerBtn}`} onClick={() => handleDelete(it.id)}>
+                    <button className={`${h.actionBtn} ${h.dangerBtn}`} onClick={() => openDeleteModal(it)}>
                       <span className={h.btnIcon}>
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="3,6 5,6 21,6"></polyline>
@@ -444,6 +538,119 @@ export default function HistoryPage() {
           )}
         </div>
       </main>
+
+      {/* Modal konfirmasi hapus */}
+      {deleteModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 999,
+            padding: "16px",
+          }}
+          aria-modal="true"
+          role="dialog"
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: 12,
+              padding: "20px",
+              maxWidth: 420,
+              width: "100%",
+              boxShadow: "0 20px 50px rgba(0,0,0,0.15)",
+            }}
+          >
+            <h3 style={{ margin: "0 0 8px", fontWeight: 700, color: "#0f172a" }}>
+              Hapus notulensi ini?
+            </h3>
+            <p style={{ margin: "0 0 16px", color: "#475569", lineHeight: 1.5 }}>
+              Tindakan ini tidak bisa dibatalkan. Notulensi dan transkripsi akan dihapus permanen.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button
+                onClick={closeDeleteModal}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 10,
+                  border: "1px solid #e2e8f0",
+                  background: "white",
+                  color: "#0f172a",
+                  cursor: "pointer",
+                }}
+              >
+                Batal
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={deleting}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 10,
+                  border: "none",
+                  background: deleting ? "#94a3b8" : "#ef4444",
+                  color: "white",
+                  cursor: deleting ? "not-allowed" : "pointer",
+                  boxShadow: "0 8px 20px rgba(239,68,68,0.35)",
+                }}
+              >
+                {deleting ? "Menghapus..." : "Hapus"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Modal */}
+      {successModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 999,
+            padding: "16px",
+          }}
+          aria-modal="true"
+          role="dialog"
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: 12,
+              padding: "20px",
+              maxWidth: 420,
+              width: "100%",
+              boxShadow: "0 20px 50px rgba(0,0,0,0.15)",
+              textAlign: "center",
+            }}
+          >
+            <div style={{ marginBottom: "12px" }}>
+              <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ margin: "0 auto", color: "#22c55e" }}>
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+            <p style={{ margin: "0", fontWeight: 500, color: "#0f172a", fontSize: "16px" }}>
+              {successMessage}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Share Popup */}
+      <SharePopup
+        isOpen={showSharePopup}
+        onClose={() => setShowSharePopup(false)}
+        documentId={shareTarget?.id || ""}
+        documentTitle={shareTarget?.title}
+      />
     </div>
   );
 }

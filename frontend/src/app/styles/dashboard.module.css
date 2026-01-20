@@ -55,11 +55,12 @@
   padding: 10px 12px; border-radius: 10px;
   color: #0b1622; text-decoration: none; font-weight: 600;
   background: transparent;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
-.navItem:hover { background: #f2f5fa; }
+.navItem:hover { background: #e7f1ff; }
 
 /* active item style aligned with topbar subtle look */
-.active { background: #eef3fb; border-left: 3px solid #0078d7; padding-left: 9px; }
+.active { background: #dfeaff; border-left: 3px solid #0078d7; padding-left: 9px; }
 
 /* Sidebar footer */
 .sbFooter {
@@ -454,12 +455,12 @@
 }
 
 .activityStatus {
-  background: #10b981;
-  color: white;
+  background: #e0ecff;
+  color: #1d4ed8;
   padding: 4px 12px;
   border-radius: 20px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .activityContent {
@@ -531,7 +532,7 @@
 }
 
 .recentItem:hover {
-  background: #f1f5f9;
+  background: #eaf2ff;
   transform: translateX(4px);
 }
 
@@ -618,5 +619,255 @@
     width: 40px;
     height: 40px;
     font-size: 20px;
+  }
+}
+
+/* Share Popup Styles */
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modalContent {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid #e5eaf1;
+}
+
+.modalTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0;
+}
+
+.modalClose {
+  background: none;
+  border: none;
+  padding: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #6b7280;
+  transition: all 0.2s;
+}
+
+.modalClose:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.modalBody {
+  padding: 24px;
+}
+
+.shareDocumentInfo {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  font-size: 14px;
+  color: #475569;
+}
+
+.shareForm {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.shareDescription {
+  color: #6b7280;
+  font-size: 14px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.generateButton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.generateButton:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.generateButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.shareResult {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.successMessage {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  color: #166534;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.shareUrlContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.formLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.urlInputGroup {
+  display: flex;
+  gap: 8px;
+}
+
+.urlInput {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  background: #f9fafb;
+  color: #6b7280;
+}
+
+.copyButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.copyButton:hover {
+  background: #e5e7eb;
+  border-color: #9ca3af;
+}
+
+.shareActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid #e5eaf1;
+}
+
+.primaryButton {
+  padding: 10px 20px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.primaryButton:hover {
+  background: #2563eb;
+}
+
+.secondaryButton {
+  padding: 10px 20px;
+  background: white;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.secondaryButton:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
+/* Mobile responsive for share popup */
+@media (max-width: 768px) {
+  .modalOverlay {
+    padding: 16px;
+  }
+
+  .modalContent {
+    max-height: 95vh;
+  }
+
+  .modalHeader,
+  .modalBody {
+    padding: 16px;
+  }
+
+  .urlInputGroup {
+    flex-direction: column;
+  }
+
+  .shareActions {
+    flex-direction: column;
   }
 }

@@ -3,14 +3,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabaseClient";
 
-type Role = "dokter_patologi" | "dokter_hewan";
-
 export default function RegisterPage() {
   const router = useRouter();
   const supabase = supabaseBrowser();
 
   const [username, setUsername] = useState("");
-  const [role, setRole]         = useState<Role | "">("");      // ⟵ NEW
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm]   = useState("");
@@ -23,14 +20,13 @@ export default function RegisterPage() {
     setErr(null); setInfo(null);
 
     if (password !== confirm) return setErr("Password confirmation does not match.");
-    if (!role) return setErr("Please choose your role.");
 
     setLoading(true);
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { username, role },                       // ⟵ simpan role
+        data: { username },
         emailRedirectTo: `${location.origin}/login`,
       },
     });
@@ -55,36 +51,14 @@ export default function RegisterPage() {
           {info && <div className="alert success">{info}</div>}
 
           <form onSubmit={onSubmit}>
-            {/* ROW: Username + Role (2 kolom) */}
-            <div className="row-2">
-              <div className="field">
-                <label>Username</label>
-                <input
-                  placeholder="Choose a username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  required
-                  autoComplete="username"
-                />
-              </div>
-
-              <div className="field">
-                <label>Role</label>
-                <div className="select">
-                  <select
-                    value={role}
-                    onChange={(e) => setRole(e.target.value as Role)}
-                    required
-                    aria-label="Choose your role"
-                  >
-                    <option value="" disabled>Choose your role</option>
-                    <option value="dokter_patologi">pathologist</option>
-                    <option value="dokter_hewan">veterinarian</option>
-                  </select>
-                  <span className="chev">▾</span>
-                </div>
-              </div>
-            </div>
+            <label>Username</label>
+            <input
+              placeholder="Choose a username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+              autoComplete="username"
+            />
 
             <label>Email</label>
             <input
@@ -130,7 +104,7 @@ export default function RegisterPage() {
       </div>
 
       <div className="image-side">
-        <img src="/login.jpg" alt="Register Illustration" />
+        <img src="/loginbaru.png" alt="Register Illustration" />
       </div>
     </div>
   );

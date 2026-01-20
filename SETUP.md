@@ -15,9 +15,11 @@
 GROQ_API_KEY=gsk_your_actual_groq_api_key_here
 GROQ_MODEL=llama-3.1-8b-instant
 
-# Supabase Configuration (opsional untuk development)
+# Supabase Configuration
 SUPABASE_URL=your_supabase_url_here
-SUPABASE_JWT_SECRET=your_supabase_jwt_secret_here
+# SUPABASE_JWT_SECRET hanya diperlukan jika token menggunakan HS256
+# Untuk RS256 (default Supabase), tidak perlu di-set
+# SUPABASE_JWT_SECRET=your_supabase_jwt_secret_here
 
 # Development Settings (PENTING!)
 DEV_ALLOW_NO_AUTH=true
@@ -76,3 +78,57 @@ PORT=5001
 - `GROQ_API_KEY` (WAJIB) - untuk AI summarization
 - `DEV_ALLOW_NO_AUTH=true` (WAJIB) - untuk bypass authentication di development
 - `DEV_BYPASS_AUTH=1` (WAJIB) - untuk bypass authentication di development
+
+### Setup Database Supabase:
+
+**PENTING:** Sebelum bisa menyimpan notulensi, Anda HARUS membuat table `summaries` di Supabase terlebih dahulu!
+
+1. **Buat table `summaries` di Supabase:**
+
+   Buka Supabase Dashboard → SQL Editor, lalu jalankan query berikut:
+   
+   **ATAU** copy-paste isi file `backend/setup_database.sql` ke SQL Editor
+
+   ```sql
+   CREATE TABLE IF NOT EXISTS summaries (
+     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+     title TEXT,
+     transcript TEXT NOT NULL,
+     summary TEXT NOT NULL,
+     duration TEXT,
+     created_at TIMESTAMPTZ DEFAULT NOW(),
+     updated_at TIMESTAMPTZ DEFAULT NOW()
+   );
+
+   -- Enable Row Level Security
+   ALTER TABLE summaries ENABLE ROW LEVEL SECURITY;
+
+   -- Policy: Users can only see their own summaries
+   CREATE POLICY "Users can view own summaries"
+     ON summaries FOR SELECT
+     USING (auth.uid() = user_id);
+
+   -- Policy: Users can insert their own summaries
+   CREATE POLICY "Users can insert own summaries"
+     ON summaries FOR INSERT
+     WITH CHECK (auth.uid() = user_id);
+
+   -- Policy: Users can update their own summaries
+   CREATE POLICY "Users can update own summaries"
+     ON summaries FOR UPDATE
+     USING (auth.uid() = user_id);
+
+   -- Policy: Users can delete their own summaries
+   CREATE POLICY "Users can delete own summaries"
+     ON summaries FOR DELETE
+     USING (auth.uid() = user_id);
+
+   -- Create index for faster queries
+   CREATE INDEX IF NOT EXISTS summaries_user_id_idx ON summaries(user_id);
+   CREATE INDEX IF NOT EXISTS summaries_created_at_idx ON summaries(created_at DESC);
+   ```
+
+2. **Verifikasi table sudah dibuat:**
+   - Buka Supabase Dashboard → Table Editor
+   - Pastikan table `summaries` muncul dengan kolom-kolom di atas

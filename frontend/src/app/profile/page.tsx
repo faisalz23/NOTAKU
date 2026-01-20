@@ -275,8 +275,7 @@ export default function ProfilePage() {
       <aside className={s.sidebar}>
         <div className={s.sbInner}>
           <div className={s.brand}>
-            <Image src="/logo_neurabot.jpg" alt="Logo Neurabot" width={36} height={36} className={s.brandImg} />
-            <div className={s.brandName}>Neurabot</div>
+            <div className={s.brandName}>NotaKu</div>
           </div>
 
           <nav className={s.nav} aria-label="Sidebar">
@@ -304,7 +303,7 @@ export default function ProfilePage() {
           </nav>
 
           <div className={s.sbFooter}>
-            <div style={{ opacity: 0.6 }}>© 2025 Neurabot</div>
+            <div style={{ opacity: 0.6 }}>© 2025 NotaKu</div>
           </div>
         </div>
       </aside>
@@ -352,12 +351,12 @@ export default function ProfilePage() {
         <div className={h.settingsContainer}>
           {/* Profile Information */}
           <section className={h.section}>
-            <h3>Profile Information</h3>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '20px', color: '#1f2937' }}>Informasi Profil</h3>
 
             <div className={h.item}>
               <div className={h.info}>
-                <div className={h.label}>Avatar</div>
-                <div className={h.desc}>Upload a profile picture</div>
+                <div className={h.label}>Avatar Profil</div>
+                <div className={h.desc}>Ubah foto profil Anda</div>
               </div>
               <div className={h.control}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -369,7 +368,6 @@ export default function ProfilePage() {
                     style={{ borderRadius: '50%', objectFit: 'cover' }}
                     unoptimized 
                     onError={(_e: any) => {
-                      // Fallback ke placeholder bila URL rusak/expired
                       setFormData(prev => ({ ...prev, avatar_url: "https://i.pravatar.cc/64?img=12" }));
                     }}
                   />
@@ -385,14 +383,14 @@ export default function ProfilePage() {
                     <label htmlFor="avatar-upload" style={{
                       display: 'inline-block',
                       padding: '8px 16px',
-                      background: '#667eea',
+                      background: '#3b82f6',
                       color: 'white',
                       borderRadius: '8px',
                       cursor: uploading ? 'not-allowed' : 'pointer',
                       fontSize: '14px',
                       fontWeight: '500'
                     }}>
-                      {uploading ? 'Uploading...' : 'Change Avatar'}
+                      {uploading ? 'Mengunggah...' : 'Ubah Avatar'}
                     </label>
                   </div>
                 </div>
@@ -401,8 +399,8 @@ export default function ProfilePage() {
 
             <div className={h.item}>
               <div className={h.info}>
-                <div className={h.label}>Username</div>
-                <div className={h.desc}>Your unique username</div>
+                <div className={h.label}>Nama Pengguna</div>
+                <div className={h.desc}>Username unik Anda</div>
               </div>
               <div className={h.control}>
                 <input
@@ -418,8 +416,8 @@ export default function ProfilePage() {
 
             <div className={h.item}>
               <div className={h.info}>
-                <div className={h.label}>Full Name</div>
-                <div className={h.desc}>Your display name</div>
+                <div className={h.label}>Nama Lengkap</div>
+                <div className={h.desc}>Nama tampilan Anda</div>
               </div>
               <div className={h.control}>
                 <input
@@ -436,7 +434,7 @@ export default function ProfilePage() {
             <div className={h.item}>
               <div className={h.info}>
                 <div className={h.label}>Email</div>
-                <div className={h.desc}>Your email address (cannot be changed)</div>
+                <div className={h.desc}>Alamat email Anda (tidak dapat diubah)</div>
               </div>
               <div className={h.control}>
                 <input
@@ -448,38 +446,23 @@ export default function ProfilePage() {
                 />
               </div>
             </div>
-
-            <div className={h.item}>
-              <div className={h.info}>
-                <div className={h.label}>Role</div>
-                <div className={h.desc}>Your assigned role</div>
-              </div>
-              <div className={h.control}>
-                <span className={`${h.status} ${h.statusActive}`}>
-                  <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
-                    <circle cx="12" cy="12" r="10" />
-                  </svg>
-                  {meta.role || 'Not assigned'}
-                </span>
-              </div>
-            </div>
           </section>
 
           {/* Password Settings */}
           <section className={h.section}>
-            <h3>Password Settings</h3>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '20px', color: '#1f2937' }}>Pengaturan Keamanan</h3>
 
             <div className={h.item}>
               <div className={h.info}>
                 <div className={h.label}>Password</div>
-                <div className={h.desc}>Change your password</div>
+                <div className={h.desc}>Ubah password akun Anda</div>
               </div>
               <div className={h.control}>
                 <button
                   onClick={() => setShowPasswordForm(!showPasswordForm)}
                   style={{
                     padding: '8px 16px',
-                    background: '#667eea',
+                    background: '#3b82f6',
                     color: 'white',
                     border: 'none',
                     borderRadius: '8px',
@@ -488,7 +471,7 @@ export default function ProfilePage() {
                     fontWeight: '500'
                   }}
                 >
-                  {showPasswordForm ? 'Cancel' : 'Change Password'}
+                  {showPasswordForm ? 'Batal' : 'Ubah Password'}
                 </button>
               </div>
             </div>
@@ -497,8 +480,8 @@ export default function ProfilePage() {
               <>
                 <div className={h.item}>
                   <div className={h.info}>
-                    <div className={h.label}>Current Password</div>
-                    <div className={h.desc}>Enter your current password</div>
+                    <div className={h.label}>Password Saat Ini</div>
+                    <div className={h.desc}>Masukkan password Anda saat ini</div>
                   </div>
                   <div className={h.control}>
                     <input
@@ -514,8 +497,8 @@ export default function ProfilePage() {
 
                 <div className={h.item}>
                   <div className={h.info}>
-                    <div className={h.label}>New Password</div>
-                    <div className={h.desc}>Enter your new password (min 6 characters)</div>
+                    <div className={h.label}>Password Baru</div>
+                    <div className={h.desc}>Masukkan password baru (minimal 6 karakter)</div>
                   </div>
                   <div className={h.control}>
                     <input
@@ -531,8 +514,8 @@ export default function ProfilePage() {
 
                 <div className={h.item}>
                   <div className={h.info}>
-                    <div className={h.label}>Confirm New Password</div>
-                    <div className={h.desc}>Confirm your new password</div>
+                    <div className={h.label}>Konfirmasi Password</div>
+                    <div className={h.desc}>Konfirmasi password baru Anda</div>
                   </div>
                   <div className={h.control}>
                     <input
@@ -551,18 +534,17 @@ export default function ProfilePage() {
 
           {/* Actions */}
           <div className={h.actionsBar}>
-            {isEditing && (
-              <button className={h.btnSave} onClick={handleSaveProfile}>
-                Save
-              </button>
-            )}
+            <button className={h.btnSave} onClick={handleSaveProfile} style={{ backgroundColor: '#3b82f6' }}>
+              Simpan Perubahan Profil
+            </button>
             
             {showPasswordForm && (
               <button 
                 className={h.btnSave} 
                 onClick={handlePasswordUpdate}
+                style={{ backgroundColor: '#3b82f6' }}
               >
-                Save
+                Simpan Password Baru
               </button>
             )}
           </div>

@@ -1,16 +1,16 @@
-# Voice to Text Application
+# Aplikasi Notulensi Otomatis Rapat
 
-A modern voice-to-text application built with Next.js, TypeScript, and Supabase.
+Aplikasi notulensi otomatis rapat menggunakan Speech-to-Text (STT) dan AI Summarization. Dibangun dengan Next.js, TypeScript, dan Supabase.
 
 ## Features
 
-- 🎤 Real-time voice transcription
-- 🤖 AI-powered text summarization
-- 📱 Responsive design with modern UI
-- 🔐 User authentication with Supabase
-- 📊 Dashboard with usage statistics
-- 📝 Transcription history management
-- ⚙️ Customizable settings
+- 🎤 Transkripsi suara real-time menggunakan Web Speech API
+- 🤖 Ringkasan otomatis menggunakan AI (Summarization)
+- 📱 Desain responsif dengan UI modern
+- 🔐 Autentikasi pengguna dengan Supabase
+- 📊 Dashboard dengan statistik penggunaan
+- 📝 Manajemen riwayat notulensi rapat
+- ⚙️ Pengaturan yang dapat disesuaikan
 
 ## Tech Stack
 
@@ -88,15 +88,15 @@ voice-to-text/
 ## Features Overview
 
 ### Dashboard
-- Overview statistics (sessions, words, summaries)
-- Recent activity feed
-- Quick access to voice recording
+- Statistik ringkasan (jumlah rapat, kata ditranskripsi, notulensi dibuat)
+- Feed aktivitas terbaru
+- Akses cepat ke perekaman suara rapat
 
 ### History
-- View all transcription history
-- Export and share functionality
-- Search and filter capabilities
-- Detailed view for each transcription
+- Lihat semua riwayat notulensi rapat
+- Fitur export dan share
+- Pencarian dan filter
+- Tampilan detail untuk setiap notulensi
 
 ### Settings
 - Voice recognition language selection
